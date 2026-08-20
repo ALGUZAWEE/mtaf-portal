@@ -1474,6 +1474,7 @@ async function importAllData(jsonText) {
 }
 function App() {
   const [session, setSession] = useState(() => loadRememberedSession());
+  const [restoringSession, setRestoringSession] = useState(() => !!loadRememberedSession());
   const [reloadKey, setReloadKey] = useState(0);
   const [importBusy, setImportBusy] = useState(false);
   const [bannerMsg, setBannerMsg] = useState("");
@@ -1485,7 +1486,14 @@ function App() {
     return () => clearInterval(watcher);
   }, []);
   useEffect(() => {
-    if (!session || !sbClient || shadowAuthReady) return;
+    if (!session || !sbClient) {
+      setRestoringSession(false);
+      return;
+    }
+    if (shadowAuthReady) {
+      setRestoringSession(false);
+      return;
+    }
     (async () => {
       try {
         const { data } = await sbClient.auth.getSession();
@@ -1502,6 +1510,8 @@ function App() {
         }
       } catch (err) {
         console.warn("MTAF: could not restore multi-user session \u2014", err && err.message ? err.message : err);
+      } finally {
+        setRestoringSession(false);
       }
     })();
   }, [session]);
@@ -1549,7 +1559,7 @@ function App() {
           #mtaf-print-area, #mtaf-print-area * { visibility: visible !important; }
           #mtaf-print-area { position: absolute; left: 0; top: 0; width: 100%; }
         }
-      `), /* @__PURE__ */ React.createElement("div", { id: "mtaf-print-area" }), /* @__PURE__ */ React.createElement("div", { style: { background: "#faf7ef", borderBottom: "1px solid #d8cfb8" }, className: "px-4 py-2 flex items-center justify-between gap-2 sans flex-wrap mtaf-offline" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, storageWorking ? 'Data is saved automatically as you go. Use "Save to file" now and then to keep an offline backup.' : hasPersistentStorage ? `Storage isn't responding right now \u2014 your changes are kept safely for this session, but won't survive a reload until it recovers. Use "Save to file" often.` : "Running in offline mode \u2014 data lives in this session only. Save often."), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("button", { onClick: handleSaveToFile, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-1.5 rounded-full" }, "Save to file"), /* @__PURE__ */ React.createElement("button", { onClick: handleImportClick, disabled: importBusy, style: { background: GOLD, color: INK }, className: "text-xs font-medium px-3 py-1.5 rounded-full disabled:opacity-50" }, importBusy ? "Loading\u2026" : "Load from file"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "application/json", onChange: handleFileChange, style: { display: "none" } }))), bannerMsg && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: bannerIsError ? "#fbe9e7" : "#e7f0ea", color: bannerIsError ? "#a3341f" : TEAL } }, bannerMsg), !session ? /* @__PURE__ */ React.createElement(AuthGate, { key: reloadKey, onLogin: setSession }) : /* @__PURE__ */ React.createElement(Shell, { key: reloadKey, session, onLogout: () => {
+      `), /* @__PURE__ */ React.createElement("div", { id: "mtaf-print-area" }), /* @__PURE__ */ React.createElement("div", { style: { background: "#faf7ef", borderBottom: "1px solid #d8cfb8" }, className: "px-4 py-2 flex items-center justify-between gap-2 sans flex-wrap mtaf-offline" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, storageWorking ? 'Data is saved automatically as you go. Use "Save to file" now and then to keep an offline backup.' : hasPersistentStorage ? `Storage isn't responding right now \u2014 your changes are kept safely for this session, but won't survive a reload until it recovers. Use "Save to file" often.` : "Running in offline mode \u2014 data lives in this session only. Save often."), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("button", { onClick: handleSaveToFile, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-1.5 rounded-full" }, "Save to file"), /* @__PURE__ */ React.createElement("button", { onClick: handleImportClick, disabled: importBusy, style: { background: GOLD, color: INK }, className: "text-xs font-medium px-3 py-1.5 rounded-full disabled:opacity-50" }, importBusy ? "Loading\u2026" : "Load from file"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "application/json", onChange: handleFileChange, style: { display: "none" } }))), bannerMsg && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: bannerIsError ? "#fbe9e7" : "#e7f0ea", color: bannerIsError ? "#a3341f" : TEAL } }, bannerMsg), restoringSession ? /* @__PURE__ */ React.createElement("div", { className: "flex-1 flex items-center justify-center py-16 sans text-sm", style: { color: MUTED } }, "Reconnecting\u2026") : !session ? /* @__PURE__ */ React.createElement(AuthGate, { key: reloadKey, onLogin: setSession }) : /* @__PURE__ */ React.createElement(Shell, { key: reloadKey, session, onLogout: () => {
     clearRememberedSession();
     setSession(null);
   }, onSessionUpdate: setSession }));
@@ -1664,7 +1674,7 @@ function AuthGate({ onLogin }) {
       const newUser = data.user;
       setBootstrapStep("Signing you in\u2026");
       setAuth({ users: [newUser] });
-      ensureShadowAuthSession(newUser.username, password, newUser.role);
+      await ensureShadowAuthSession(newUser.username, password, newUser.role);
       onLogin(newUser);
     } catch (err) {
       setError(`Something went wrong at "${bootstrapStep}": ${err && err.message ? err.message : "unknown error"}. Please try again.`);
@@ -1721,7 +1731,7 @@ function AuthGate({ onLogin }) {
         return;
       }
       const user = data.user;
-      ensureShadowAuthSession(uname, password, user.role);
+      await ensureShadowAuthSession(uname, password, user.role);
       if (user.mustChangePassword) {
         setPendingUser(user);
         setScreen("changePassword");
@@ -1853,7 +1863,7 @@ function AuthGate({ onLogin }) {
       }
       const newUser = data.user;
       setAuth({ users: [newUser] });
-      ensureShadowAuthSession(newUser.username, password, newUser.role);
+      await ensureShadowAuthSession(newUser.username, password, newUser.role);
       onLogin(newUser);
     } catch (err) {
       setError(`Could not register: ${err && err.message ? err.message : "unknown error"}.`);
