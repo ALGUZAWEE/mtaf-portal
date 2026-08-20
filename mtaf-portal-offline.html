@@ -509,7 +509,35 @@ let localCacheWorking = hasLocalCache;
 let storageIsWorking = !!sbClient;
 let lastChangeAt = 0;
 const LEGACY_OPEN_KEYS = new Set([K.auth, K.records]);
+const unsyncedDocKeys = /* @__PURE__ */ new Set();
+async function resyncUnsyncedDocKeys() {
+  if (!currentSchoolId || !sbClient || unsyncedDocKeys.size === 0) return;
+  for (const key of Array.from(unsyncedDocKeys)) {
+    try {
+      const value = MEMORY_DB[key];
+      if (value === void 0) {
+        unsyncedDocKeys.delete(key);
+        continue;
+      }
+      const { error } = await sbClient.from("mtaf_documents").upsert({ school_id: currentSchoolId, data_key: key, payload: value });
+      if (error) throw error;
+      unsyncedDocKeys.delete(key);
+    } catch (err) {
+    }
+  }
+}
+if (typeof window !== "undefined") {
+  setInterval(resyncUnsyncedDocKeys, 2e4);
+  window.addEventListener("online", resyncUnsyncedDocKeys);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") resyncUnsyncedDocKeys();
+  });
+}
 async function getJSON(key, fallback) {
+  if (unsyncedDocKeys.has(key)) {
+    const v2 = MEMORY_DB[key];
+    if (v2 !== void 0) return JSON.parse(JSON.stringify(v2));
+  }
   if (storageIsWorking) {
     try {
       if (currentSchoolId) {
@@ -596,10 +624,14 @@ async function setJSON(key, value) {
       const { error } = await sbClient.from("mtaf_documents").upsert({ school_id: currentSchoolId, data_key: key, payload: value });
       if (error) throw error;
       docSucceeded = true;
+      unsyncedDocKeys.delete(key);
       logDbAudit("save", key);
     } catch (docErr) {
       docErrorMsg = (docErr && (docErr.message || docErr.details || docErr.hint)) || String(docErr);
+      unsyncedDocKeys.add(key);
     }
+  } else {
+    unsyncedDocKeys.add(key);
   }
   const ok = legacySucceeded || docSucceeded;
   if (!ok && typeof window !== "undefined") {
