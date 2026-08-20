@@ -578,7 +578,7 @@ async function setJSON(key, value) {
       localCacheWorking = false;
     }
   }
-  const canUseLegacy = !currentSchoolId;
+  const canUseLegacy = true;
   let legacySucceeded = false;
   if (storageIsWorking && canUseLegacy) {
     try {
@@ -590,6 +590,7 @@ async function setJSON(key, value) {
     }
   }
   let docSucceeded = false;
+  let docErrorMsg = "";
   if (currentSchoolId) {
     try {
       const { error } = await sbClient.from("mtaf_documents").upsert({ school_id: currentSchoolId, data_key: key, payload: value });
@@ -597,9 +598,14 @@ async function setJSON(key, value) {
       docSucceeded = true;
       logDbAudit("save", key);
     } catch (docErr) {
+      docErrorMsg = (docErr && (docErr.message || docErr.details || docErr.hint)) || String(docErr);
     }
   }
-  return legacySucceeded || docSucceeded;
+  const ok = legacySucceeded || docSucceeded;
+  if (!ok && typeof window !== "undefined") {
+    window.alert("MTAF save FAILED for '" + key + "'.\nSchool ID set: " + (currentSchoolId ? "yes" : "NO") + "\nError: " + (docErrorMsg || "unknown \u2014 legacy path also unavailable"));
+  }
+  return ok;
 }
 async function logLoginEvent(user) {
   try {
