@@ -1561,7 +1561,7 @@ function AuthGate({ onLogin }) {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loginForm, setLoginForm] = useState({ username: "", role: "Student", password: "" });
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [pendingUser, setPendingUser] = useState(null);
   const [newPw, setNewPw] = useState({ password: "", confirm: "", question: "", answer: "" });
   const [code2fa, setCode2fa] = useState("");
