@@ -5117,6 +5117,15 @@ function RequestsModule() {
   }
   useEffect(() => {
     reload();
+    const interval = setInterval(reload, 2e4);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
   async function setStatus(id, status) {
     const next = { items: data.items.map((it) => it.id === id ? { ...it, status } : it) };
