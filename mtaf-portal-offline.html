@@ -679,7 +679,8 @@ async function setJSON(key, value) {
     markKeyUnsynced(key);
   }
   const ok = legacySucceeded || docSucceeded;
-  if (!ok && typeof window !== "undefined") {
+  const QUIET_FAIL_KEYS = /* @__PURE__ */ new Set([K.loginHistory]);
+  if (!ok && !QUIET_FAIL_KEYS.has(key) && typeof window !== "undefined") {
     window.alert("MTAF save FAILED for '" + key + "'.\nSchool ID set: " + (currentSchoolId ? "yes" : "NO") + "\nError: " + (docErrorMsg || "unknown \u2014 legacy path also unavailable"));
   }
   return ok;
