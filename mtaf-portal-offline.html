@@ -553,7 +553,10 @@ async function resyncUnsyncedDocKeys() {
         markKeySynced(key);
         continue;
       }
-      const { error } = await sbClient.from("mtaf_documents").upsert({ school_id: currentSchoolId, data_key: key, payload: value });
+      const { error } = await sbClient.from("mtaf_documents").upsert(
+        { school_id: currentSchoolId, data_key: key, payload: value },
+        { onConflict: "school_id,data_key" }
+      );
       if (error) throw error;
       markKeySynced(key);
     } catch (err) {
@@ -615,7 +618,10 @@ async function getJSON(key, fallback) {
           }
           if (currentSchoolId) {
             try {
-              await sbClient.from("mtaf_documents").upsert({ school_id: currentSchoolId, data_key: key, payload: data.value });
+              await sbClient.from("mtaf_documents").upsert(
+                { school_id: currentSchoolId, data_key: key, payload: data.value },
+                { onConflict: "school_id,data_key" }
+              );
             } catch (migrateErr) {
             }
           }
@@ -666,7 +672,10 @@ async function setJSON(key, value) {
   let docErrorMsg = "";
   if (currentSchoolId) {
     try {
-      const { error } = await sbClient.from("mtaf_documents").upsert({ school_id: currentSchoolId, data_key: key, payload: value });
+      const { error } = await sbClient.from("mtaf_documents").upsert(
+        { school_id: currentSchoolId, data_key: key, payload: value },
+        { onConflict: "school_id,data_key" }
+      );
       if (error) throw error;
       docSucceeded = true;
       markKeySynced(key);
@@ -1550,7 +1559,10 @@ async function importAllData(jsonText) {
     }
     if (currentSchoolId) {
       try {
-        await sbClient.from("mtaf_documents").upsert({ school_id: currentSchoolId, data_key: key, payload: value });
+        await sbClient.from("mtaf_documents").upsert(
+          { school_id: currentSchoolId, data_key: key, payload: value },
+          { onConflict: "school_id,data_key" }
+        );
       } catch (docErr) {
       }
     }
