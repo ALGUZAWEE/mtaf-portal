@@ -2010,7 +2010,8 @@ const OWNER_ROLES = ["Director", "Proprietor", "Admin"];
 const SENIOR_ADMIN_ROLES = ["Head", "Principal"];
 const MODULE_DEFS = {
   overview: { label: "Dashboard", roles: ["admin", "owner"] },
-  records: { label: "People", roles: ["admin", "owner"] },
+  records_students: { label: "People \u2014 Pupils", roles: ["admin", "owner"] },
+  records_staff: { label: "People \u2014 Staff", roles: ["admin", "owner"] },
   classes: { label: "Academic Structure", roles: ["admin", "owner"] },
   finance: { label: "Finance", roles: ["owner", "cashier"] },
   academics: { label: "Academic Management", roles: ["admin", "owner", "teacher"] },
@@ -2025,13 +2026,14 @@ const MODULE_DEFS = {
   settings: { label: "Settings", roles: ["owner"] },
   cbt: { label: "CBT", roles: ["admin", "owner", "teacher"] },
   secret: { label: "Security Centre", roles: ["owner"] },
+  myrequests: { label: "My Requests", roles: ["owner", "admin", "teacher", "security", "cashier", "other"] },
   scheme: { label: "Curriculum & Scheme", roles: ["admin", "owner", "teacher"] },
   taketest: { label: "CBT / Assessments", roles: ["student"] },
   mydashboard: { label: "Student Portal", roles: ["student"] },
   mychildren: { label: "Parent Portal", roles: ["parent"] }
 };
 const STAFF_MODULE_KEYS = Object.keys(MODULE_DEFS).filter((k) => !["taketest", "mydashboard", "mychildren"].includes(k));
-const MODULE_ICONS = { overview: "home", records: "users", classes: "grid", finance: "naira-sign", academics: "book-open", attendance: "check-square", library: "book", books: "package", inventory: "archive", communication: "message-circle", requests: "inbox", reports: "bar-chart-2", backup: "save", settings: "settings", cbt: "monitor", secret: "lock", scheme: "clipboard", taketest: "monitor", mydashboard: "award", mychildren: "heart" };
+const MODULE_ICONS = { overview: "home", records_students: "users", records_staff: "users", classes: "grid", finance: "naira-sign", academics: "book-open", attendance: "check-square", library: "book", books: "package", inventory: "archive", communication: "message-circle", requests: "inbox", myrequests: "inbox", reports: "bar-chart-2", backup: "save", settings: "settings", cbt: "monitor", secret: "lock", scheme: "clipboard", taketest: "monitor", mydashboard: "award", mychildren: "heart" };
 const ICON_PATHS = {
   home: [["path", { d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }], ["polyline", { points: "9 22 9 12 15 12 15 22" }]],
   users: [["path", { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" }], ["circle", { cx: 9, cy: 7, r: 4 }], ["path", { d: "M23 21v-2a4 4 0 0 0-3-3.87" }], ["path", { d: "M16 3.13a4 4 0 0 1 0 7.75" }]],
@@ -2156,10 +2158,10 @@ function Shell({ session, onLogout, onSessionUpdate }) {
     protectedModules.includes(key) && !unlockedKeys.has(key) && /* @__PURE__ */ React.createElement("span", { className: "text-xs" }, "\u{1F512}")
   ));
   const moduleCategories = {
-    Main: ["overview", "records", "classes"],
+    Main: ["overview", "records_students", "records_staff", "classes"],
     School: ["academics", "attendance", "library", "books", "cbt", "scheme", "taketest"],
     Finance: ["finance", "inventory"],
-    Communication: ["communication", "requests"],
+    Communication: ["communication", "requests", "myrequests"],
     Administration: ["reports", "backup", "settings", "secret"],
     Family: ["mychildren"],
     Student: ["mydashboard"]
@@ -2171,7 +2173,7 @@ function Shell({ session, onLogout, onSessionUpdate }) {
     const matchesCategory = moduleCategory === "All" || moduleCategoryFor(key) === moduleCategory;
     return matchesQuery && matchesCategory;
   });
-  const moduleSwitchContent = /* @__PURE__ */ React.createElement(React.Fragment, null, active === "overview" && /* @__PURE__ */ React.createElement(OverviewModule, { session }), active === "records" && /* @__PURE__ */ React.createElement(RecordsModule, null), active === "classes" && /* @__PURE__ */ React.createElement(ClassesModule, null), active === "finance" && /* @__PURE__ */ React.createElement(FinanceModule, { session, tag }), active === "academics" && /* @__PURE__ */ React.createElement(AcademicsModule, { canPromote: tag === "admin" || tag === "owner" }), active === "attendance" && /* @__PURE__ */ React.createElement(AttendanceModule, { canMarkPupils: tag === "admin" || tag === "owner" || tag === "teacher", canMarkStaff: tag === "admin" || tag === "owner" || tag === "security", actorName: session.fullName, canOverride: tag === "admin" || tag === "owner", tag, personId: session.personId }), active === "library" && /* @__PURE__ */ React.createElement(LibraryModule, null), active === "books" && /* @__PURE__ */ React.createElement(BookDistributionModule, null), active === "inventory" && /* @__PURE__ */ React.createElement(InventoryModule, { session }), active === "communication" && /* @__PURE__ */ React.createElement(CommunicationModule, null), active === "requests" && /* @__PURE__ */ React.createElement(RequestsModule, null), active === "reports" && /* @__PURE__ */ React.createElement(ReportsModule, null), active === "backup" && /* @__PURE__ */ React.createElement(BackupModule, null), active === "settings" && /* @__PURE__ */ React.createElement(SettingsModule, null), active === "cbt" && /* @__PURE__ */ React.createElement(CBTModule, { session, tag }), active === "secret" && /* @__PURE__ */ React.createElement(SecretAreaModule, { session }), active === "scheme" && /* @__PURE__ */ React.createElement(SchemeOfWorkModule, { tag, session }), active === "taketest" && /* @__PURE__ */ React.createElement(TakeTestModule, { session }), active === "mydashboard" && /* @__PURE__ */ React.createElement(MyDashboardModule, { session }), active === "mychildren" && /* @__PURE__ */ React.createElement(ParentDashboardModule, { session, onSessionUpdate }));
+  const moduleSwitchContent = /* @__PURE__ */ React.createElement(React.Fragment, null, active === "overview" && /* @__PURE__ */ React.createElement(OverviewModule, { session }), active === "records_students" && /* @__PURE__ */ React.createElement(RecordsModule, { only: "students" }), active === "records_staff" && /* @__PURE__ */ React.createElement(RecordsModule, { only: "staff" }), active === "classes" && /* @__PURE__ */ React.createElement(ClassesModule, null), active === "finance" && /* @__PURE__ */ React.createElement(FinanceModule, { session, tag }), active === "academics" && /* @__PURE__ */ React.createElement(AcademicsModule, { canPromote: tag === "admin" || tag === "owner" }), active === "attendance" && /* @__PURE__ */ React.createElement(AttendanceModule, { canMarkPupils: tag === "admin" || tag === "owner" || tag === "teacher", canMarkStaff: tag === "admin" || tag === "owner" || tag === "security", actorName: session.fullName, canOverride: tag === "admin" || tag === "owner", tag, personId: session.personId }), active === "library" && /* @__PURE__ */ React.createElement(LibraryModule, null), active === "books" && /* @__PURE__ */ React.createElement(BookDistributionModule, null), active === "inventory" && /* @__PURE__ */ React.createElement(InventoryModule, { session }), active === "communication" && /* @__PURE__ */ React.createElement(CommunicationModule, null), active === "requests" && /* @__PURE__ */ React.createElement(RequestsModule, null), active === "myrequests" && /* @__PURE__ */ React.createElement(MyRequestsModule, { session }), active === "reports" && /* @__PURE__ */ React.createElement(ReportsModule, null), active === "backup" && /* @__PURE__ */ React.createElement(BackupModule, null), active === "settings" && /* @__PURE__ */ React.createElement(SettingsModule, null), active === "cbt" && /* @__PURE__ */ React.createElement(CBTModule, { session, tag }), active === "secret" && /* @__PURE__ */ React.createElement(SecretAreaModule, { session }), active === "scheme" && /* @__PURE__ */ React.createElement(SchemeOfWorkModule, { tag, session }), active === "taketest" && /* @__PURE__ */ React.createElement(TakeTestModule, { session }), active === "mydashboard" && /* @__PURE__ */ React.createElement(MyDashboardModule, { session }), active === "mychildren" && /* @__PURE__ */ React.createElement(ParentDashboardModule, { session, onSessionUpdate }));
   return /* @__PURE__ */ React.createElement("div", { style: { background: CREAM, minHeight: "100vh", fontFamily: "'Fraunces', Georgia, serif" } }, /* @__PURE__ */ React.createElement(FontImport, null), /* @__PURE__ */ React.createElement("header", { style: { background: INK }, className: "px-5 py-4 sm:px-8" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ React.createElement(Crest, null), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { color: "#fff" }, className: "text-lg font-semibold leading-tight" }, "MTAF Portal"), /* @__PURE__ */ React.createElement("p", { style: { color: "#c9c2ac" }, className: "sans text-xs mt-0.5" }, session.fullName, " \xB7 ", tag === "student" ? "Pupil" : tag === "parent" ? "Parent / Guardian" : session.staffRole))), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement(BackupStatusBadge, null), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowChangePw(true), style: { background: "transparent", color: "#c9c2ac", border: "1px solid #3a5449" }, className: "sans px-4 py-1.5 rounded-full text-xs font-medium" }, "Change password"), /* @__PURE__ */ React.createElement("button", { onClick: onLogout, style: { background: TEAL, color: "#fff" }, className: "sans px-4 py-1.5 rounded-full text-xs font-medium" }, "Log out")))), showChangePw && /* @__PURE__ */ React.createElement(ChangePasswordModal, { session, onClose: () => setShowChangePw(false) }), /* @__PURE__ */ React.createElement("div", { className: "mtaf-layout max-w-6xl mx-auto" }, /* @__PURE__ */ React.createElement("nav", { className: "mtaf-sidebar", style: { width: 220, background: INK, padding: "1.25rem 0.75rem", flexShrink: 0 } }, sidebarItems), /* @__PURE__ */ React.createElement("div", { className: "mtaf-main mtaf-main-pad px-5 sm:px-8 py-5", style: { paddingBottom: "5.5rem" } }, moduleSwitchContent)), /* @__PURE__ */ React.createElement("nav", { className: "mtaf-bottomnav", style: { background: INK, borderTop: "1px solid #3a5449" } }, primaryKeys.map((key) => {
     const d = MODULE_DEFS[key];
     return /* @__PURE__ */ React.createElement("button", { key, onClick: () => requestActivate(key), style: { flex: 1, color: active === key ? GOLD : "#c9c2ac", background: "transparent" }, className: "sans flex flex-col items-center justify-center py-2 gap-0.5" }, /* @__PURE__ */ React.createElement(Icon, { name: MODULE_ICONS[key], size: 20 }), /* @__PURE__ */ React.createElement("span", { className: "text-xs" }, d.label));
@@ -2180,9 +2182,9 @@ function Shell({ session, onLogout, onSessionUpdate }) {
     if (!items.length) return null;
     return /* @__PURE__ */ React.createElement("section", { key: cat, className: "mtaf-module-section" }, /* @__PURE__ */ React.createElement("div", { className: "mtaf-module-section-title" }, cat), /* @__PURE__ */ React.createElement("div", { className: "mtaf-module-grid" }, items.map(([key, d]) => {
       const help = {
-        overview: "School overview & quick actions", records: "Students, staff & records", classes: "Classes, sections & subjects", finance: "Fees, payments & balances",
+        overview: "School overview & quick actions", records_students: "Pupil records & enrollment", records_staff: "Staff records, roles & salaries", classes: "Classes, sections & subjects", finance: "Fees, payments & balances",
         academics: "Results, promotion & academics", attendance: "Students, staff & attendance", library: "Library catalogue & borrowing", books: "Book issue & distribution",
-        inventory: "Stock, sales & supplies", communication: "Notices, messages & alerts", reports: "Reports & school insights", backup: "Save, restore & data safety",
+        inventory: "Stock, sales & supplies", communication: "Notices, messages & alerts", requests: "Parent & student messages", myrequests: "Send a request, complaint or excuse to the office", reports: "Reports & school insights", backup: "Save, restore & data safety",
         settings: "School configuration & controls", cbt: "Tests, quizzes & assessments", secret: "Security, access & audit", scheme: "Curriculum & scheme of work",
         taketest: "Take assigned tests", mydashboard: "Your learning & progress", mychildren: "Children, results & fees"
       }[key] || "Open module";
@@ -2414,9 +2416,9 @@ function todaysSectionWindows(dateObj, holidays) {
   return SECTIONS.map((sec) => ({ section: sec, window: getSectionWindowForDate(sec, dateObj, holidays) })).filter((x) => x.window);
 }
 const ROLES = ["Teacher", "Head", "Principal", "Director", "Proprietor", "Admin", "Cashier", "Security", "Other"];
-function RecordsModule() {
+function RecordsModule({ only } = {}) {
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState("students");
+  const [tab, setTab] = useState(only || "students");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyStudent);
@@ -2633,7 +2635,7 @@ function RecordsModule() {
     }
   }
   if (!data) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading records\u2026", inline: true });
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap justify-between gap-3 mb-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, ["students", "staff"].map((t) => /* @__PURE__ */ React.createElement(TabBtn, { key: t, active: tab === t, onClick: () => {
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap justify-between gap-3 mb-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, !only && ["students", "staff"].map((t) => /* @__PURE__ */ React.createElement(TabBtn, { key: t, active: tab === t, onClick: () => {
     setTab(t);
     setConfirmDeleteId(null);
   } }, t === "students" ? "Pupils" : "Staff"))), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("button", { onClick: () => setShowAccessMatrix(true), style: { background: "transparent", color: TEAL, border: `1.5px solid ${TEAL}` }, className: "sans px-4 py-2 rounded-full text-sm font-semibold" }, "\u{1F510} Access Matrix"), /* @__PURE__ */ React.createElement("button", { onClick: openAdd, style: { background: GOLD, color: INK }, className: "sans px-4 py-2 rounded-full text-sm font-semibold" }, "+ Add ", tab === "students" ? "Pupil" : "Staff"))), mintedId && !showForm && /* @__PURE__ */ React.createElement("div", { className: "sans mb-4 px-4 py-3 rounded-lg flex items-center gap-3 flex-wrap", style: { background: "#fff", border: `1.5px dashed ${GOLD}` } }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-sm" }, "Newly issued ID:"), /* @__PURE__ */ React.createElement("span", { style: { background: INK, color: GOLD, border: `1px solid ${GOLD}` }, className: "px-3 py-1 rounded font-mono text-sm" }, mintedId), data[tab].find((r) => r.id === mintedId) && /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => setLetterModalPerson(data[tab].find((r) => r.id === mintedId)), color: TEAL }, tab === "students" ? "Print admission letter" : "Print appointment letter")), /* @__PURE__ */ React.createElement("input", { value: search, onChange: (e) => setSearch(e.target.value), placeholder: "Search name or ID\u2026", style: { borderColor: "#d8cfb8" }, className: inputCls + " sans mb-3" }), /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 sans text-xs mb-3", style: { color: MUTED } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: showArchived, onChange: (e) => setShowArchived(e.target.checked) }), "Show archived ", tab === "students" ? "pupils" : "staff"), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 items-center mb-4" }, /* @__PURE__ */ React.createElement("select", { value: filterTown, onChange: (e) => {
@@ -5150,7 +5152,56 @@ function RequestsModule() {
   if (!data) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading requests\u2026", inline: true });
   const items = data.items.filter((it) => (filter === "all" || it.status === filter) && (senderFilter === "all" || it.senderRole === senderFilter));
   const statusColor = { new: "#a3341f", read: "#8a6d1e", resolved: TEAL };
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-2" }, ["all", "new", "read", "resolved"].map((f) => /* @__PURE__ */ React.createElement(TabBtn, { key: f, active: filter === f, onClick: () => setFilter(f) }, f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-4" }, ["all", "Parent", "Student"].map((f) => /* @__PURE__ */ React.createElement(TabBtn, { key: f, active: senderFilter === f, onClick: () => setSenderFilter(f) }, f === "all" ? "All senders" : f))), items.length === 0 ? /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No messages here.")) : /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, items.map((it) => /* @__PURE__ */ React.createElement(Card, { key: it.id }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-2 mb-1" }, /* @__PURE__ */ React.createElement("div", { style: { color: INK }, className: "font-serif font-semibold text-sm" }, it.subject), /* @__PURE__ */ React.createElement("span", { style: { color: statusColor[it.status] || MUTED }, className: "sans text-xs font-semibold uppercase" }, it.status)), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "sans text-xs mb-2" }, it.senderName, " \xB7 ", it.senderRole, it.studentName ? ` \xB7 re: ${it.studentName}` : "", " \xB7 ", new Date(it.createdAt).toLocaleString()), /* @__PURE__ */ React.createElement("div", { style: { color: TEXT }, className: "sans text-sm mb-3 whitespace-pre-wrap" }, it.message), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, it.status !== "read" && /* @__PURE__ */ React.createElement("button", { onClick: () => setStatus(it.id, "read"), className: "sans text-xs px-3 py-1.5 rounded-lg font-semibold", style: { background: "#eee6d3", color: INK } }, "Mark read"), it.status !== "resolved" && /* @__PURE__ */ React.createElement("button", { onClick: () => setStatus(it.id, "resolved"), className: "sans text-xs px-3 py-1.5 rounded-lg font-semibold", style: { background: GOLD, color: INK } }, "Mark resolved"))))));
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-2" }, ["all", "new", "read", "resolved"].map((f) => /* @__PURE__ */ React.createElement(TabBtn, { key: f, active: filter === f, onClick: () => setFilter(f) }, f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-4" }, ["all", "Parent", "Student", "Staff"].map((f) => /* @__PURE__ */ React.createElement(TabBtn, { key: f, active: senderFilter === f, onClick: () => setSenderFilter(f) }, f === "all" ? "All senders" : f))), items.length === 0 ? /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No messages here.")) : /* @__PURE__ */ React.createElement("div", { className: "space-y-3" }, items.map((it) => /* @__PURE__ */ React.createElement(Card, { key: it.id }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-2 mb-1" }, /* @__PURE__ */ React.createElement("div", { style: { color: INK }, className: "font-serif font-semibold text-sm" }, it.type && it.type !== "Request" ? `[${it.type}] ` : "", it.subject), /* @__PURE__ */ React.createElement("span", { style: { color: statusColor[it.status] || MUTED }, className: "sans text-xs font-semibold uppercase" }, it.status)), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "sans text-xs mb-2" }, it.senderName, " \xB7 ", it.senderRole, it.studentName ? ` \xB7 re: ${it.studentName}` : "", " \xB7 ", new Date(it.createdAt).toLocaleString()), /* @__PURE__ */ React.createElement("div", { style: { color: TEXT }, className: "sans text-sm mb-3 whitespace-pre-wrap" }, it.message), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, it.status !== "read" && /* @__PURE__ */ React.createElement("button", { onClick: () => setStatus(it.id, "read"), className: "sans text-xs px-3 py-1.5 rounded-lg font-semibold", style: { background: "#eee6d3", color: INK } }, "Mark read"), it.status !== "resolved" && /* @__PURE__ */ React.createElement("button", { onClick: () => setStatus(it.id, "resolved"), className: "sans text-xs px-3 py-1.5 rounded-lg font-semibold", style: { background: GOLD, color: INK } }, "Mark resolved"))))));
+}
+function MyRequestsModule({ session }) {
+  const [myRequests, setMyRequests] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  const [draft, setDraft] = useState({ type: "Request", subject: "", message: "" });
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendMsg, setSendMsg] = useState("");
+  async function reload() {
+    setLoadError("");
+    try {
+      const { data, error } = await sbClient.functions.invoke("clever-function", { body: { action: "staff-requests" } });
+      if (error) throw error;
+      if (!data || !data.ok) {
+        setLoadError((data && data.error) || "Could not load your requests right now.");
+        return;
+      }
+      setMyRequests(data.myRequests || []);
+    } catch (err) {
+      setLoadError("Could not reach the server \u2014 check your connection and try again.");
+    }
+  }
+  useEffect(() => {
+    reload();
+  }, [session]);
+  async function sendMessage() {
+    setSendMsg("");
+    if (!draft.subject.trim() || !draft.message.trim()) {
+      setSendMsg("Enter a subject and a message.");
+      return;
+    }
+    setSendBusy(true);
+    try {
+      const { data, error } = await sbClient.functions.invoke("clever-function", { body: { action: "submit-request", type: draft.type, subject: draft.subject, message: draft.message } });
+      if (error) throw error;
+      if (!data || !data.ok) {
+        setSendMsg((data && data.error) || "Could not send \u2014 try again.");
+        return;
+      }
+      setDraft({ type: "Request", subject: "", message: "" });
+      setSendMsg("Sent to the school office.");
+      await reload();
+    } catch (err) {
+      setSendMsg("Could not send \u2014 check your connection.");
+    } finally {
+      setSendBusy(false);
+    }
+  }
+  const statusColor = { new: "#a3341f", read: "#8a6d1e", resolved: TEAL };
+  return /* @__PURE__ */ React.createElement("div", null, loadError && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, loadError), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "Send a request, complaint or excuse"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-3" }, "This goes straight to the school office \u2014 use it for leave requests, excuses, complaints, or anything else you need to raise."), /* @__PURE__ */ React.createElement("select", { value: draft.type, onChange: (e) => setDraft({ ...draft, type: e.target.value }), className: inputCls + " sans mb-2", style: { borderColor: "#d8cfb8" } }, ["Request", "Complaint", "Excuse"].map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t))), /* @__PURE__ */ React.createElement("input", { placeholder: "Subject", value: draft.subject, onChange: (e) => setDraft({ ...draft, subject: e.target.value }), className: inputCls + " sans mb-2", style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("textarea", { placeholder: "Details", rows: 4, value: draft.message, onChange: (e) => setDraft({ ...draft, message: e.target.value }), className: inputCls + " sans mb-2", style: { borderColor: "#d8cfb8" } }), sendMsg && /* @__PURE__ */ React.createElement("p", { className: "sans text-xs mb-2", style: { color: sendMsg.startsWith("Sent") ? TEAL : "#a3341f" } }, sendMsg), /* @__PURE__ */ React.createElement("button", { onClick: sendMessage, disabled: sendBusy, style: { background: GOLD, color: INK }, className: "sans px-4 py-2 rounded-lg text-sm font-semibold" }, sendBusy ? "Sending\u2026" : "Send")), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "My past submissions"), myRequests.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "You haven't sent anything yet.") : myRequests.map((r) => /* @__PURE__ */ React.createElement("div", { key: r.id, className: "sans text-sm py-2", style: { borderTop: "1px solid #eee6d3" } }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between gap-2" }, /* @__PURE__ */ React.createElement("span", { style: { color: INK }, className: "font-semibold" }, r.type && r.type !== "Request" ? `[${r.type}] ` : "", r.subject), /* @__PURE__ */ React.createElement("span", { style: { color: statusColor[r.status] || MUTED }, className: "text-xs font-semibold uppercase shrink-0" }, r.status)), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "text-xs" }, new Date(r.createdAt).toLocaleString())))));
 }
 function ReportsModule() {
   const [records, setRecords] = useState(null);
