@@ -5150,7 +5150,8 @@ function InventoryModule({ session }) {
       setError((data && data.error) || (error && error.message) || "Could not save stock \u2014 try again.");
       return;
     }
-    setInv(await getJSON(K.inventory, { stockBatches: [], sales: [], catalog: [] }));
+    const savedBatch = data.batch;
+    setInv((prev) => ({ ...prev, stockBatches: [savedBatch, ...prev.stockBatches] }));
     setInfo(`Added ${batch.quantity} \xD7 ${batch.itemName}.`);
     setStockDraft({ ...stockDraft, itemName: "", quantity: "", pricePerUnit: "", note: "" });
   }
@@ -5258,7 +5259,7 @@ function InventoryModule({ session }) {
       return;
     }
     const newSales = saleResult.sales;
-    setInv(await getJSON(K.inventory, { stockBatches: [], sales: [], catalog: [] }));
+    setInv((prev) => ({ ...prev, sales: [...newSales, ...prev.sales] }));
     if (saleDraft.buyerStudentId) {
       const student = students.find((s) => s.id === saleDraft.buyerStudentId);
       if (student) {
