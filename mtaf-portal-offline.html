@@ -322,6 +322,16 @@ function guessItemSection(label) {
   if (s.includes("mutawass")) return "Mutawassid";
   return "Other";
 }
+const SPEND_FROM_OPTIONS = ["School fee", "Books fee", "Muzakkira's fee", "Other"];
+function guessSpendFromCategory(label) {
+  const s = String(label || "").toLowerCase();
+  if (s.includes("muzakkira")) return "Muzakkira's fee";
+  if (s.includes("book")) return "Books fee";
+  return "School fee";
+}
+function expenseSpendFromLabel(e) {
+  return e.spendFrom === "Other" ? e.spendFromOther || "Other" : e.spendFrom;
+}
 function studentInScope(s, filterTown, filterSection, filterClass, filterArm) {
   if (!s) return filterTown === "All" && filterSection === "All" && filterClass === "All" && filterArm === "All";
   if (filterTown !== "All" && s.town !== filterTown) return false;
@@ -2983,7 +2993,7 @@ function FinanceModule({ session, tag }) {
     return { income, salaries, expenses, net: income - salaries - expenses };
   }, [fin]);
   if (!fin) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading finance\u2026", inline: true });
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, students, session, classes }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["expenses", "Expenses"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, students, session, classes }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "expenses" && !isCashier && /* @__PURE__ */ React.createElement(ExpensesTab, { fin, persist }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
 }
 const DEFAULT_FEE_ITEMS = [
   { category: "Western Section Tuition", label: "Babu", amount: 0 },
@@ -3922,6 +3932,140 @@ const REPORT_GROUPS = [
   { group: "Collector Reports", items: [["collectorReport", "Collector Report (by town / section)"]] },
   { group: "Fee Reports", items: [["feeReport", "Billed vs Paid, by Section, by Item"]] }
 ];
+function emptyExpenseDraft() {
+  return { town: TOWNS[0], section: SECTIONS[0], amount: "", spendFor: "", date: today(), givenTo: "", givenBy: "", spendFrom: SPEND_FROM_OPTIONS[0], spendFromOther: "" };
+}
+function ExpensesTab({ fin, persist }) {
+  const [draft, setDraft] = useState(emptyExpenseDraft());
+  const [editingId, setEditingId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const [filterTown, setFilterTown] = useState("All");
+  const [filterSection, setFilterSection] = useState("All");
+  const [from, setFrom] = useState(addDays(today(), -30));
+  const [to, setTo] = useState(today());
+  const expenses = fin.expenses || [];
+  function flash(text) {
+    setNote(text);
+    setTimeout(() => setNote(null), 3500);
+  }
+  function startEdit(e) {
+    setEditingId(e.id);
+    setDraft({ town: e.town, section: e.section, amount: String(e.amount), spendFor: e.spendFor, date: e.date, givenTo: e.givenTo, givenBy: e.givenBy, spendFrom: e.spendFrom, spendFromOther: e.spendFromOther || "" });
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(emptyExpenseDraft());
+  }
+  async function saveExpense() {
+    if (!draft.amount || Number(draft.amount) <= 0) {
+      flash("Enter a valid amount.");
+      return;
+    }
+    if (!draft.spendFor.trim()) {
+      flash("Enter what the money was spent for.");
+      return;
+    }
+    if (draft.spendFrom === "Other" && !draft.spendFromOther.trim()) {
+      flash("Specify the 'Other' spend-from source.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const entry = {
+        id: editingId || `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        town: draft.town,
+        section: draft.section,
+        amount: Number(draft.amount),
+        spendFor: draft.spendFor.trim(),
+        date: draft.date,
+        givenTo: draft.givenTo.trim(),
+        givenBy: draft.givenBy.trim(),
+        spendFrom: draft.spendFrom,
+        spendFromOther: draft.spendFrom === "Other" ? draft.spendFromOther.trim() : "",
+        createdAt: editingId ? expenses.find((e) => e.id === editingId).createdAt : (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const others = expenses.filter((e) => e.id !== entry.id);
+      await persist({ ...fin, expenses: [entry, ...others] });
+      cancelEdit();
+      flash(editingId ? "Expense updated." : "Expense recorded.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function deleteExpense(id) {
+    await persist({ ...fin, expenses: expenses.filter((e) => e.id !== id) });
+    if (editingId === id) cancelEdit();
+  }
+  const filtered = useMemo(() => {
+    return expenses.filter((e) => {
+      if (filterTown !== "All" && e.town !== filterTown) return false;
+      if (filterSection !== "All" && e.section !== filterSection) return false;
+      if (e.date < from || e.date > to) return false;
+      return true;
+    }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  }, [expenses, filterTown, filterSection, from, to]);
+  const periodTotal = useMemo(() => filtered.reduce((a, e) => a + e.amount, 0), [filtered]);
+  const byTown = useMemo(() => {
+    const map = {};
+    filtered.forEach((e) => {
+      map[e.town] = (map[e.town] || 0) + e.amount;
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [filtered]);
+  const bySection = useMemo(() => {
+    const map = {};
+    filtered.forEach((e) => {
+      map[e.section] = (map[e.section] || 0) + e.amount;
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [filtered]);
+  const incomeByBucket = useMemo(() => {
+    const map = { "School fee": 0, "Books fee": 0, "Muzakkira's fee": 0 };
+    fin.transactions.forEach((t) => (t.tickedItems || []).forEach((i) => {
+      const bucket = guessSpendFromCategory(i.label);
+      map[bucket] = (map[bucket] || 0) + (i.finalAmount || 0);
+      if (i.addOn) {
+        const b2 = guessSpendFromCategory(i.addOn.label || "muzakkira");
+        map[b2] = (map[b2] || 0) + (i.addOn.finalAmount || 0);
+      }
+    }));
+    return map;
+  }, [fin.transactions]);
+  const expenseByBucket = useMemo(() => {
+    const map = {};
+    expenses.forEach((e) => {
+      const key = expenseSpendFromLabel(e);
+      map[key] = (map[key] || 0) + e.amount;
+    });
+    return map;
+  }, [expenses]);
+  const netRows = useMemo(() => {
+    const standard = ["School fee", "Books fee", "Muzakkira's fee"].map((b) => ({
+      bucket: b,
+      collected: incomeByBucket[b] || 0,
+      spent: expenseByBucket[b] || 0
+    }));
+    const extras = Object.keys(expenseByBucket).filter((k) => !["School fee", "Books fee", "Muzakkira's fee"].includes(k)).map((b) => ({ bucket: b, collected: 0, spent: expenseByBucket[b] || 0 }));
+    return [...standard, ...extras];
+  }, [incomeByBucket, expenseByBucket]);
+  function exportExpenses() {
+    const out = filtered.map((e) => ({
+      Date: e.date,
+      Town: e.town,
+      Section: e.section,
+      "Amount Spent": e.amount,
+      "Spend For": e.spendFor,
+      "Given To": e.givenTo,
+      "Given By": e.givenBy,
+      "Spend From": expenseSpendFromLabel(e)
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), "Expenses");
+    XLSX.writeFile(wb, `MTAF_Expenses_${from}_to_${to}.xlsx`);
+  }
+  return /* @__PURE__ */ React.createElement("div", null, note && /* @__PURE__ */ React.createElement(Banner, { kind: note.includes("recorded") || note.includes("updated") ? "ok" : "error" }, note), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-3" }, editingId ? "Edit expense" : "Record a new expense"), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-x-3" }, /* @__PURE__ */ React.createElement(Field, { label: "Town", required: true }, /* @__PURE__ */ React.createElement("select", { value: draft.town, onChange: (e) => setDraft({ ...draft, town: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, TOWNS.map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t)))), /* @__PURE__ */ React.createElement(Field, { label: "Section", required: true }, /* @__PURE__ */ React.createElement("select", { value: draft.section, onChange: (e) => setDraft({ ...draft, section: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s)))), /* @__PURE__ */ React.createElement(Field, { label: "Amount Spent (\u20A6)", required: true }, /* @__PURE__ */ React.createElement("input", { type: "number", value: draft.amount, onChange: (e) => setDraft({ ...draft, amount: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(Field, { label: "Spend For", required: true, span: true }, /* @__PURE__ */ React.createElement("input", { value: draft.spendFor, onChange: (e) => setDraft({ ...draft, spendFor: e.target.value }), placeholder: "e.g. Chalk and dusters", className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(Field, { label: "Date", required: true }, /* @__PURE__ */ React.createElement("input", { type: "date", value: draft.date, onChange: (e) => setDraft({ ...draft, date: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(Field, { label: "Given To" }, /* @__PURE__ */ React.createElement("input", { value: draft.givenTo, onChange: (e) => setDraft({ ...draft, givenTo: e.target.value }), placeholder: "Recipient's name", className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(Field, { label: "Given By" }, /* @__PURE__ */ React.createElement("input", { value: draft.givenBy, onChange: (e) => setDraft({ ...draft, givenBy: e.target.value }), placeholder: "Who paid it out", className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(Field, { label: "Spend From", required: true }, /* @__PURE__ */ React.createElement("select", { value: draft.spendFrom, onChange: (e) => setDraft({ ...draft, spendFrom: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, SPEND_FROM_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o }, o)))), draft.spendFrom === "Other" && /* @__PURE__ */ React.createElement(Field, { label: "Specify source", required: true }, /* @__PURE__ */ React.createElement("input", { value: draft.spendFromOther, onChange: (e) => setDraft({ ...draft, spendFromOther: e.target.value }), placeholder: "e.g. Donation, PTA fund", className: inputCls, style: { borderColor: "#d8cfb8" } }))), /* @__PURE__ */ React.createElement("div", { className: "flex gap-3 mt-1" }, /* @__PURE__ */ React.createElement("button", { onClick: saveExpense, disabled: busy, style: { background: GOLD, color: INK }, className: "sans px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, busy ? "Saving\u2026" : editingId ? "Update Expense" : "+ Add Expense"), editingId && /* @__PURE__ */ React.createElement(LinkBtn, { onClick: cancelEdit, color: MUTED }, "Cancel edit"))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 items-center mb-4 sans" }, /* @__PURE__ */ React.createElement("input", { type: "date", value: from, onChange: (e) => setFrom(e.target.value), className: "text-sm rounded-lg px-3 py-2 border", style: { borderColor: "#d8cfb8" }, title: "From" }), /* @__PURE__ */ React.createElement("input", { type: "date", value: to, onChange: (e) => setTo(e.target.value), className: "text-sm rounded-lg px-3 py-2 border", style: { borderColor: "#d8cfb8" }, title: "To" }), /* @__PURE__ */ React.createElement("select", { value: filterTown, onChange: (e) => setFilterTown(e.target.value), className: "text-sm rounded-lg px-3 py-2 border", style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "All" }, "All towns"), TOWNS.map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t))), /* @__PURE__ */ React.createElement("select", { value: filterSection, onChange: (e) => setFilterSection(e.target.value), className: "text-sm rounded-lg px-3 py-2 border", style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "All" }, "All sections"), SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s))), /* @__PURE__ */ React.createElement("button", { onClick: exportExpenses, disabled: filtered.length === 0, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-2 rounded-lg ml-auto disabled:opacity-50" }, "Export to Excel")), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(SummaryRow, { label: `TOTAL SPENT (${from} to ${to})`, value: naira(periodTotal), bold: true, accent: "#a3341f" }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Number of expense entries", value: String(filtered.length) })), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-4 mb-5" }, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h4", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "By town"), byTown.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs" }, "No expenses in this range."), byTown.map(([town, amt]) => /* @__PURE__ */ React.createElement(SummaryRow, { key: town, label: town, value: naira(amt) }))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h4", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "By section"), bySection.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs" }, "No expenses in this range."), bySection.map(([s, amt]) => /* @__PURE__ */ React.createElement(SummaryRow, { key: s, label: s, value: naira(amt) })))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h4", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-1" }, "Collected vs Spent, by source (all-time)"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-2" }, "Shows total fee collections against expenses charged to that same source, so you can see what's left."), /* @__PURE__ */ React.createElement(TableShell, { head: ["Spend From", "Collected", "Spent", "Remaining"] }, netRows.map((r, i) => /* @__PURE__ */ React.createElement("tr", { key: r.bucket, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, r.bucket), /* @__PURE__ */ React.createElement(Td, null, naira(r.collected)), /* @__PURE__ */ React.createElement(Td, { style: { color: "#a3341f" } }, naira(r.spent)), /* @__PURE__ */ React.createElement(Td, { style: { color: r.collected - r.spent >= 0 ? TEAL : "#a3341f", fontWeight: 600 } }, naira(r.collected - r.spent)))))), /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2 mt-6" }, "Expense entries"), /* @__PURE__ */ React.createElement(TableShell, { head: ["Date", "Town", "Section", "Amount", "Spend For", "Given To", "Given By", "Spend From", ""] }, filtered.length === 0 && /* @__PURE__ */ React.createElement(EmptyRow, { cols: 9, text: "No expenses match these filters." }), filtered.map((e, i) => /* @__PURE__ */ React.createElement("tr", { key: e.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, e.date), /* @__PURE__ */ React.createElement(Td, null, e.town), /* @__PURE__ */ React.createElement(Td, null, e.section), /* @__PURE__ */ React.createElement(Td, { style: { color: "#a3341f" } }, naira(e.amount)), /* @__PURE__ */ React.createElement(Td, null, e.spendFor), /* @__PURE__ */ React.createElement(Td, null, e.givenTo || "\u2014"), /* @__PURE__ */ React.createElement(Td, null, e.givenBy || "\u2014"), /* @__PURE__ */ React.createElement(Td, null, expenseSpendFromLabel(e)), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => startEdit(e), color: TEAL }, "Edit"), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => deleteExpense(e.id), color: "#a3341f" }, "Delete")))))));
+}
 function FinancialReportsTab({ fin, students, classes }) {
   const [report, setReport] = useState("collectionRange");
   return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-4 mb-5" }, REPORT_GROUPS.map((g) => /* @__PURE__ */ React.createElement("div", { key: g.group }, /* @__PURE__ */ React.createElement("p", { style: { color: GOLD }, className: "sans text-xs font-semibold uppercase tracking-wide mb-1" }, g.group), g.items.map(([k, l]) => /* @__PURE__ */ React.createElement(
