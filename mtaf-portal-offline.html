@@ -5135,7 +5135,6 @@ function InventoryModule({ session }) {
       return;
     }
     const batch = {
-      id: `stk-${Date.now()}`,
       itemName: stockDraft.itemName.trim(),
       quantity: Number(stockDraft.quantity),
       pricePerUnit: Number(stockDraft.pricePerUnit) || 0,
@@ -5143,11 +5142,15 @@ function InventoryModule({ session }) {
       section: stockDraft.section,
       className: stockDraft.className,
       arm: stockDraft.arm,
-      addedBy: addedByName,
       dateAdded: stockDraft.dateAdded,
       note: stockDraft.note
     };
-    await persist({ ...inv, stockBatches: [batch, ...inv.stockBatches] });
+    const { data, error } = await sbClient.functions.invoke("clever-function", { body: { action: "record-stock-batch", batch } });
+    if (error || !data || !data.ok) {
+      setError((data && data.error) || (error && error.message) || "Could not save stock \u2014 try again.");
+      return;
+    }
+    setInv(await getJSON(K.inventory, { stockBatches: [], sales: [], catalog: [] }));
     setInfo(`Added ${batch.quantity} \xD7 ${batch.itemName}.`);
     setStockDraft({ ...stockDraft, itemName: "", quantity: "", pricePerUnit: "", note: "" });
   }
@@ -5227,15 +5230,12 @@ function InventoryModule({ session }) {
         return;
       }
     }
-    const receiptId = `rcpt-${Date.now()}`;
     const subtotal = items.reduce((a, it) => a + it.quantity * it.pricePerUnit, 0);
     const discountAmount = saleDiscountType === "percent" ? Math.round(subtotal * (Math.min(100, Math.max(0, Number(saleDiscountValue) || 0)) / 100)) : Math.min(subtotal, Math.max(0, Number(saleDiscountValue) || 0));
-    const newSales = items.map((it) => {
+    const outgoingItems = items.map((it) => {
       const lineSubtotal = it.quantity * it.pricePerUnit;
       const lineDiscount = subtotal > 0 ? Math.round(discountAmount * (lineSubtotal / subtotal)) : 0;
       return {
-        id: `sale-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        receiptId,
         itemName: it.itemName,
         quantity: it.quantity,
         pricePerUnit: it.pricePerUnit,
@@ -5247,13 +5247,18 @@ function InventoryModule({ session }) {
         arm: it.arm,
         buyerName: saleDraft.buyerName,
         buyerStudentId: saleDraft.buyerStudentId || "",
-        soldBy: addedByName,
         sellerSection: saleDraft.sellerSection,
         dateSold: saleDraft.dateSold,
         note: saleDraft.note
       };
     });
-    await persist({ ...inv, sales: [...newSales, ...inv.sales] });
+    const { data: saleResult, error: saleError } = await sbClient.functions.invoke("clever-function", { body: { action: "record-inventory-sale", items: outgoingItems } });
+    if (saleError || !saleResult || !saleResult.ok) {
+      setError((saleResult && saleResult.error) || (saleError && saleError.message) || "Could not record the sale \u2014 try again.");
+      return;
+    }
+    const newSales = saleResult.sales;
+    setInv(await getJSON(K.inventory, { stockBatches: [], sales: [], catalog: [] }));
     if (saleDraft.buyerStudentId) {
       const student = students.find((s) => s.id === saleDraft.buyerStudentId);
       if (student) {
