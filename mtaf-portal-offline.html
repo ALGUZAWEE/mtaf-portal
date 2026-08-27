@@ -312,7 +312,93 @@ const inputCls = "w-full px-3 py-2 rounded-lg border text-sm outline-none focus:
 const naira = (n) => `\u20A6${Number(n || 0).toLocaleString()}`;
 const ADMIN_ROLES = ["Head", "Principal", "Director", "Proprietor", "Admin"];
 const TERMS = ["First Term", "Second Term", "Third Term"];
-const PAYMENT_METHODS = ["Cash", "Bank", "Transfer", "POS", "Other"];
+const PAYMENT_METHODS = ["Cash", "Bank", "Transfer", "POS", "Uncollected", "Exchange/Replace", "Other"];
+const PAYMENT_TYPES = ["Cash", "Transfer", "POS", "Uncollected", "Exchange/Replace"];
+const SCHOOL_BANK_ACCOUNTS = [
+  { bank: "FCMB", accountNumber: "6550360015" },
+  { bank: "MONIE POINT", accountNumber: "8125453433" },
+  { bank: "OPAY", accountNumber: "8125453433" },
+  { bank: "Other", accountNumber: "" }
+];
+const EXCHANGE_REASONS = ["Lost by Student", "Lost by Teacher", "Approved Spoiled", "Class or Section Mistake", "Change"];
+function emptyPaymentDetails() {
+  return {
+    type: "Cash",
+    senderAccountName: "",
+    bank: "",
+    bankAccountNumber: "",
+    bankOther: "",
+    transferDate: "",
+    posReference: "",
+    uncollectedPaymentDate: "",
+    uncollectedReceiptNo: "",
+    uncollectedSection: "",
+    uncollectedAmount: "",
+    uncollectedSellerName: "",
+    uncollectedSellerSection: "",
+    exchangeReason: "",
+    exchangeBuyingDate: "",
+    exchangeReceiptNo: "",
+    exchangeSection: "",
+    exchangeAmount: "",
+    exchangeSellerName: "",
+    exchangeSellerSection: ""
+  };
+}
+function PaymentTypeFields({ value, onChange, disabled }) {
+  const v = value || emptyPaymentDetails();
+  const set = (patch) => onChange({ ...v, ...patch });
+  const pillStyle = (active) => ({ background: active ? "#e7f0ea" : "#fff", color: active ? TEAL : MUTED, border: `1px solid ${active ? TEAL : "#d8cfb8"}` });
+  return /* @__PURE__ */ React.createElement(
+    "div",
+    { className: "sans" },
+    /* @__PURE__ */ React.createElement("label", { className: "text-xs font-medium block mb-1", style: { color: MUTED } }, "Payment type"),
+    /* @__PURE__ */ React.createElement("div", { className: "flex gap-1.5 flex-wrap mb-2" }, PAYMENT_TYPES.map((pt) => /* @__PURE__ */ React.createElement(
+      "button",
+      { key: pt, type: "button", disabled, onClick: () => set({ type: pt }), style: { ...pillStyle(v.type === pt), opacity: disabled ? 0.5 : 1, cursor: disabled ? "not-allowed" : "pointer" }, className: "text-xs px-2.5 py-1 rounded-full" },
+      pt
+    ))),
+    v.type === "Transfer" && /* @__PURE__ */ React.createElement(
+      "div",
+      { className: "grid sm:grid-cols-2 gap-2 mb-2" },
+      /* @__PURE__ */ React.createElement("input", { disabled, placeholder: "Sender's account name", value: v.senderAccountName, onChange: (e) => set({ senderAccountName: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }),
+      /* @__PURE__ */ React.createElement("input", { disabled, type: "date", value: v.transferDate, onChange: (e) => set({ transferDate: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }),
+      /* @__PURE__ */ React.createElement(
+        "select",
+        { disabled, value: v.bank, onChange: (e) => {
+          const chosen = SCHOOL_BANK_ACCOUNTS.find((b) => b.bank === e.target.value);
+          set({ bank: e.target.value, bankAccountNumber: chosen ? chosen.accountNumber : "" });
+        }, className: inputCls + " sm:col-span-2", style: { borderColor: "#d8cfb8" } },
+        /* @__PURE__ */ React.createElement("option", { value: "" }, "Sent to bank\u2026"),
+        SCHOOL_BANK_ACCOUNTS.map((b) => /* @__PURE__ */ React.createElement("option", { key: b.bank, value: b.bank }, b.bank))
+      ),
+      v.bank && v.bank !== "Other" && /* @__PURE__ */ React.createElement("input", { disabled: true, value: `Account: ${v.bankAccountNumber}`, className: inputCls + " sm:col-span-2", style: { borderColor: "#d8cfb8", background: "#faf7ef", color: MUTED } }),
+      v.bank === "Other" && /* @__PURE__ */ React.createElement("input", { disabled, placeholder: "Bank name and account number", value: v.bankOther, onChange: (e) => set({ bankOther: e.target.value }), className: inputCls + " sm:col-span-2", style: { borderColor: "#d8cfb8" } })
+    ),
+    v.type === "POS" && /* @__PURE__ */ React.createElement("input", { disabled, placeholder: "POS reference / note (optional)", value: v.posReference, onChange: (e) => set({ posReference: e.target.value }), className: inputCls + " mb-2", style: { borderColor: "#d8cfb8" } }),
+    v.type === "Uncollected" && /* @__PURE__ */ React.createElement(
+      "div",
+      { className: "grid sm:grid-cols-2 gap-2 mb-2" },
+      /* @__PURE__ */ React.createElement(Field, { label: "Payment date" }, /* @__PURE__ */ React.createElement("input", { disabled, type: "date", value: v.uncollectedPaymentDate, onChange: (e) => set({ uncollectedPaymentDate: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Receipt number" }, /* @__PURE__ */ React.createElement("input", { disabled, value: v.uncollectedReceiptNo, onChange: (e) => set({ uncollectedReceiptNo: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Section bought" }, /* @__PURE__ */ React.createElement("select", { disabled, value: v.uncollectedSection, onChange: (e) => set({ uncollectedSection: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014"), SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s)))),
+      /* @__PURE__ */ React.createElement(Field, { label: "Amount paid" }, /* @__PURE__ */ React.createElement("input", { disabled, type: "number", value: v.uncollectedAmount, onChange: (e) => set({ uncollectedAmount: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Seller name" }, /* @__PURE__ */ React.createElement("input", { disabled, value: v.uncollectedSellerName, onChange: (e) => set({ uncollectedSellerName: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Seller section" }, /* @__PURE__ */ React.createElement("select", { disabled, value: v.uncollectedSellerSection, onChange: (e) => set({ uncollectedSellerSection: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014"), SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s))))
+    ),
+    v.type === "Exchange/Replace" && /* @__PURE__ */ React.createElement(
+      "div",
+      { className: "grid sm:grid-cols-2 gap-2 mb-2" },
+      /* @__PURE__ */ React.createElement(Field, { label: "Reason", span: true }, /* @__PURE__ */ React.createElement("div", { className: "flex gap-1.5 flex-wrap" }, EXCHANGE_REASONS.map((r) => /* @__PURE__ */ React.createElement("button", { key: r, type: "button", disabled, onClick: () => set({ exchangeReason: r }), style: { ...pillStyle(v.exchangeReason === r), opacity: disabled ? 0.5 : 1 }, className: "text-xs px-2.5 py-1 rounded-full" }, r)))),
+      /* @__PURE__ */ React.createElement(Field, { label: "Buying date" }, /* @__PURE__ */ React.createElement("input", { disabled, type: "date", value: v.exchangeBuyingDate, onChange: (e) => set({ exchangeBuyingDate: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Receipt number" }, /* @__PURE__ */ React.createElement("input", { disabled, value: v.exchangeReceiptNo, onChange: (e) => set({ exchangeReceiptNo: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Section bought" }, /* @__PURE__ */ React.createElement("select", { disabled, value: v.exchangeSection, onChange: (e) => set({ exchangeSection: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014"), SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s)))),
+      /* @__PURE__ */ React.createElement(Field, { label: "Amount paid" }, /* @__PURE__ */ React.createElement("input", { disabled, type: "number", value: v.exchangeAmount, onChange: (e) => set({ exchangeAmount: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Seller name" }, /* @__PURE__ */ React.createElement("input", { disabled, value: v.exchangeSellerName, onChange: (e) => set({ exchangeSellerName: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })),
+      /* @__PURE__ */ React.createElement(Field, { label: "Seller section" }, /* @__PURE__ */ React.createElement("select", { disabled, value: v.exchangeSellerSection, onChange: (e) => set({ exchangeSellerSection: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014"), SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s))))
+    )
+  );
+}
 function guessItemSection(label) {
   const s = String(label || "").toLowerCase();
   if (s.includes("western")) return "Western";
@@ -3105,7 +3191,7 @@ function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
   const [addOnDiscounts, setAddOnDiscounts] = useState({});
   const [amountPaid, setAmountPaid] = useState("");
   const [collector, setCollector] = useState((session == null ? void 0 : session.fullName) || "");
-  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHODS[0]);
+  const [paymentDetails, setPaymentDetails] = useState(emptyPaymentDetails());
   const [calendar, setCalendar] = useState(null);
   useEffect(() => {
     (async () => setCalendar(await getJSON(K.termCalendar, { session: currentSession(), bySection: {} })))();
@@ -3179,7 +3265,7 @@ function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
           totalNewCharge,
           amountPaid: paidNum,
           collector: collector.trim() || "Unrecorded",
-          paymentMethod
+          paymentMethod: paymentDetails.type
         }
       });
       if (error || !data || !data.ok) {
@@ -3190,19 +3276,30 @@ function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
       // server-side, atomically) \u2014 update local state to match it
       // rather than re-saving the whole finance object, which would
       // undo the atomicity this was built for.
-      setFinLocal((prev) => ({ ...prev, transactions: [data.transaction, ...prev.transactions] }));
+      let savedTx = data.transaction;
+      const hasExtraDetails = Object.keys(paymentDetails).some((k) => k !== "type" && paymentDetails[k]);
+      if (hasExtraDetails) {
+        const { data: detailData, error: detailErr } = await sbClient.functions.invoke("clever-function", { body: { action: "attach-payment-details", transactionId: savedTx.id, paymentDetails } });
+        if (!detailErr && detailData && detailData.ok) {
+          savedTx = { ...savedTx, paymentDetails };
+        } else {
+          setSaveError("Payment recorded, but the extra payment-type details couldn't be saved \u2014 you can re-add them by editing this payment.");
+        }
+      }
+      setFinLocal((prev) => ({ ...prev, transactions: [savedTx, ...prev.transactions] }));
       setTicked({});
       setTickedAddOns({});
       setDiscounts({});
       setAddOnDiscounts({});
       setAmountPaid("");
+      setPaymentDetails(emptyPaymentDetails());
     } catch (err) {
       setSaveError(err && err.message ? err.message : "Could not record the payment \u2014 try again.");
     } finally {
       setSaveBusy(false);
     }
   }
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans" }, /* @__PURE__ */ React.createElement("select", { value: studentId, onChange: (e) => setStudentId(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 pupil \u2014"), students.map((s) => /* @__PURE__ */ React.createElement("option", { key: s.id, value: s.id }, s.fullName))), /* @__PURE__ */ React.createElement("select", { value: term, onChange: (e) => setTerm(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, TERMS.map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t))), /* @__PURE__ */ React.createElement("input", { value: sessionStr, onChange: (e) => setSessionStr(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans mt-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Date to be paid (due date)"), /* @__PURE__ */ React.createElement("input", { type: "date", value: dueDate, onChange: (e) => setDueDate(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), /* @__PURE__ */ React.createElement("input", { value: collector, onChange: (e) => setCollector(e.target.value), placeholder: "Name of collector", className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Payment method"), /* @__PURE__ */ React.createElement("select", { value: paymentMethod, onChange: (e) => setPaymentMethod(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, PAYMENT_METHODS.map((m) => /* @__PURE__ */ React.createElement("option", { key: m }, m)))))), studentId && /* @__PURE__ */ React.createElement(React.Fragment, null, scholarship && /* @__PURE__ */ React.createElement(Banner, { kind: "ok" }, "\u{1F393} ", selectedStudent.fullName, " has an active scholarship \u2014 ", scholarship.percent, "% off is applied automatically to new charges below.", scholarship.reason ? ` (${scholarship.reason})` : ""), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-3" }, "Payment for (tick what applies)"), fin.catalog.categories.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No fee items in the catalog yet \u2014 add some in Fee Catalog first."), fin.catalog.categories.map((cat) => /* @__PURE__ */ React.createElement("div", { key: cat.id, className: "mb-3" }, /* @__PURE__ */ React.createElement("div", { style: { color: GOLD }, className: "sans text-xs font-semibold uppercase tracking-wide mb-1" }, cat.name), cat.items.filter((item) => !item.classNames || item.classNames.length === 0 || !selectedClassName || item.classNames.includes(selectedClassName)).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.id }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center py-1.5 sans text-sm gap-2", style: { color: TEXT } }, /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 flex-1 min-w-0" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !!ticked[item.id], onChange: (e) => setTicked({ ...ticked, [item.id]: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", { className: "truncate" }, item.label)), /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans" }, /* @__PURE__ */ React.createElement("select", { value: studentId, onChange: (e) => setStudentId(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 pupil \u2014"), students.map((s) => /* @__PURE__ */ React.createElement("option", { key: s.id, value: s.id }, s.fullName))), /* @__PURE__ */ React.createElement("select", { value: term, onChange: (e) => setTerm(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, TERMS.map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t))), /* @__PURE__ */ React.createElement("input", { value: sessionStr, onChange: (e) => setSessionStr(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans mt-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Date to be paid (due date)"), /* @__PURE__ */ React.createElement("input", { type: "date", value: dueDate, onChange: (e) => setDueDate(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), /* @__PURE__ */ React.createElement("input", { value: collector, onChange: (e) => setCollector(e.target.value), placeholder: "Name of collector", className: inputCls, style: { borderColor: "#d8cfb8" } })))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(PaymentTypeFields, { value: paymentDetails, onChange: setPaymentDetails })), studentId && /* @__PURE__ */ React.createElement(React.Fragment, null, scholarship && /* @__PURE__ */ React.createElement(Banner, { kind: "ok" }, "\u{1F393} ", selectedStudent.fullName, " has an active scholarship \u2014 ", scholarship.percent, "% off is applied automatically to new charges below.", scholarship.reason ? ` (${scholarship.reason})` : ""), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-3" }, "Payment for (tick what applies)"), fin.catalog.categories.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No fee items in the catalog yet \u2014 add some in Fee Catalog first."), fin.catalog.categories.map((cat) => /* @__PURE__ */ React.createElement("div", { key: cat.id, className: "mb-3" }, /* @__PURE__ */ React.createElement("div", { style: { color: GOLD }, className: "sans text-xs font-semibold uppercase tracking-wide mb-1" }, cat.name), cat.items.filter((item) => !item.classNames || item.classNames.length === 0 || !selectedClassName || item.classNames.includes(selectedClassName)).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.id }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center py-1.5 sans text-sm gap-2", style: { color: TEXT } }, /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 flex-1 min-w-0" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !!ticked[item.id], onChange: (e) => setTicked({ ...ticked, [item.id]: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", { className: "truncate" }, item.label)), /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "number",
@@ -3319,7 +3416,8 @@ function LedgerTab({ fin, persist, students, classes }) {
       })),
       amountPaid: String(t.amountPaid),
       collector: t.collector || "",
-      paymentMethod: t.paymentMethod || PAYMENT_METHODS[0]
+      paymentMethod: t.paymentMethod || PAYMENT_METHODS[0],
+      paymentDetails: t.paymentDetails || emptyPaymentDetails()
     });
   }
   function closeEdit() {
@@ -3352,7 +3450,7 @@ function LedgerTab({ fin, persist, students, classes }) {
     const paidNum = Number(editState.amountPaid) || 0;
     const currentBalance = totalToBePaid - paidNum;
     const transactions = fin.transactions.map(
-      (tx) => tx.id === t.id ? { ...tx, tickedItems: editState.tickedItems, totalNewCharge: editTotalNewCharge, totalToBePaid, amountPaid: paidNum, currentBalance, collector: editState.collector.trim() || "Unrecorded", paymentMethod: editState.paymentMethod } : tx
+      (tx) => tx.id === t.id ? { ...tx, tickedItems: editState.tickedItems, totalNewCharge: editTotalNewCharge, totalToBePaid, amountPaid: paidNum, currentBalance, collector: editState.collector.trim() || "Unrecorded", paymentMethod: editState.paymentDetails.type, paymentDetails: editState.paymentDetails } : tx
     );
     await persist({ ...fin, transactions });
     closeEdit();
@@ -3383,7 +3481,7 @@ function LedgerTab({ fin, persist, students, classes }) {
   })), editingId && editState && (() => {
     const t = fin.transactions.find((x) => x.id === editingId);
     const warnStale = !isMostRecentForStudent(t);
-    return /* @__PURE__ */ React.createElement("div", { style: { border: `1.5px solid ${GOLD}` }, className: "rounded-xl bg-white p-4 sans" }, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-1" }, "Editing ", t.receipt), warnStale && /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-xs mb-3" }, "This isn't this pupil's most recent payment \u2014 a newer one already used this bill's balance as its starting point, so changing amounts here won't automatically update that later record. Safest to only edit the newest payment for each pupil."), editState.tickedItems.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-sm mb-2" }, "No items left on this bill."), editState.tickedItems.map((item, idx) => /* @__PURE__ */ React.createElement("div", { key: idx, className: "py-2", style: { borderTop: idx ? "1px solid #eee6d3" : "none" } }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center gap-2 text-sm" }, /* @__PURE__ */ React.createElement("span", { style: { color: TEXT }, className: "flex-1 min-w-0 truncate" }, item.label), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "%", value: item.discountPct || "", onChange: (e) => updateItemDiscount(idx, e.target.value), style: { borderColor: "#d8cfb8", width: 52 }, className: "px-1.5 py-1 rounded border text-xs text-center" }), /* @__PURE__ */ React.createElement("span", { style: { width: 76, textAlign: "right", color: TEXT } }, item.discountPct > 0 && /* @__PURE__ */ React.createElement("span", { style: { textDecoration: "line-through", color: MUTED }, className: "text-xs mr-1" }, naira(item.amount)), naira(item.finalAmount)), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => removeItem(idx), color: "#a3341f" }, "Withdraw")), item.addOn && /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center gap-2 text-sm pl-4 mt-1", style: { color: MUTED } }, /* @__PURE__ */ React.createElement("span", { className: "flex-1 min-w-0 truncate" }, "+ ", item.addOn.label), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "%", value: item.addOn.discountPct || "", onChange: (e) => updateAddOnDiscount(idx, e.target.value), style: { borderColor: "#d8cfb8", width: 52 }, className: "px-1.5 py-1 rounded border text-xs text-center" }), /* @__PURE__ */ React.createElement("span", { style: { width: 76, textAlign: "right" } }, item.addOn.discountPct > 0 && /* @__PURE__ */ React.createElement("span", { style: { textDecoration: "line-through" }, className: "text-xs mr-1" }, naira(item.addOn.amount)), naira(item.addOn.finalAmount)), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => removeAddOn(idx), color: "#a3341f" }, "Withdraw")))), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Last balance (fixed)", value: naira(t.lastBalance) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Total new payment", value: naira(editTotalNewCharge) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Total amount to be paid", value: naira(t.lastBalance + editTotalNewCharge), bold: true }), /* @__PURE__ */ React.createElement("div", { className: "mt-2 mb-2" }, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "You paid"), /* @__PURE__ */ React.createElement("input", { type: "number", value: editState.amountPaid, onChange: (e) => setEditState({ ...editState, amountPaid: e.target.value }), className: inputCls + " max-w-xs", style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 mb-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), /* @__PURE__ */ React.createElement("input", { value: editState.collector, onChange: (e) => setEditState({ ...editState, collector: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Payment method"), /* @__PURE__ */ React.createElement("select", { value: editState.paymentMethod, onChange: (e) => setEditState({ ...editState, paymentMethod: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, PAYMENT_METHODS.map((m) => /* @__PURE__ */ React.createElement("option", { key: m }, m))))), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Current balance", value: naira(t.lastBalance + editTotalNewCharge - (Number(editState.amountPaid) || 0)), bold: true, accent: t.lastBalance + editTotalNewCharge - (Number(editState.amountPaid) || 0) > 0 ? "#a3341f" : TEAL }), /* @__PURE__ */ React.createElement("div", { className: "flex gap-3 mt-3" }, /* @__PURE__ */ React.createElement("button", { onClick: () => saveEdit(t), style: { background: TEAL, color: "#fff" }, className: "px-5 py-2 rounded-lg text-sm font-semibold" }, "Save changes"), /* @__PURE__ */ React.createElement("button", { onClick: closeEdit, style: { color: MUTED }, className: "text-sm" }, "Cancel")));
+    return /* @__PURE__ */ React.createElement("div", { style: { border: `1.5px solid ${GOLD}` }, className: "rounded-xl bg-white p-4 sans" }, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-1" }, "Editing ", t.receipt), warnStale && /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-xs mb-3" }, "This isn't this pupil's most recent payment \u2014 a newer one already used this bill's balance as its starting point, so changing amounts here won't automatically update that later record. Safest to only edit the newest payment for each pupil."), editState.tickedItems.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-sm mb-2" }, "No items left on this bill."), editState.tickedItems.map((item, idx) => /* @__PURE__ */ React.createElement("div", { key: idx, className: "py-2", style: { borderTop: idx ? "1px solid #eee6d3" : "none" } }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center gap-2 text-sm" }, /* @__PURE__ */ React.createElement("span", { style: { color: TEXT }, className: "flex-1 min-w-0 truncate" }, item.label), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "%", value: item.discountPct || "", onChange: (e) => updateItemDiscount(idx, e.target.value), style: { borderColor: "#d8cfb8", width: 52 }, className: "px-1.5 py-1 rounded border text-xs text-center" }), /* @__PURE__ */ React.createElement("span", { style: { width: 76, textAlign: "right", color: TEXT } }, item.discountPct > 0 && /* @__PURE__ */ React.createElement("span", { style: { textDecoration: "line-through", color: MUTED }, className: "text-xs mr-1" }, naira(item.amount)), naira(item.finalAmount)), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => removeItem(idx), color: "#a3341f" }, "Withdraw")), item.addOn && /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center gap-2 text-sm pl-4 mt-1", style: { color: MUTED } }, /* @__PURE__ */ React.createElement("span", { className: "flex-1 min-w-0 truncate" }, "+ ", item.addOn.label), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "%", value: item.addOn.discountPct || "", onChange: (e) => updateAddOnDiscount(idx, e.target.value), style: { borderColor: "#d8cfb8", width: 52 }, className: "px-1.5 py-1 rounded border text-xs text-center" }), /* @__PURE__ */ React.createElement("span", { style: { width: 76, textAlign: "right" } }, item.addOn.discountPct > 0 && /* @__PURE__ */ React.createElement("span", { style: { textDecoration: "line-through" }, className: "text-xs mr-1" }, naira(item.addOn.amount)), naira(item.addOn.finalAmount)), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => removeAddOn(idx), color: "#a3341f" }, "Withdraw")))), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Last balance (fixed)", value: naira(t.lastBalance) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Total new payment", value: naira(editTotalNewCharge) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Total amount to be paid", value: naira(t.lastBalance + editTotalNewCharge), bold: true }), /* @__PURE__ */ React.createElement("div", { className: "mt-2 mb-2" }, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "You paid"), /* @__PURE__ */ React.createElement("input", { type: "number", value: editState.amountPaid, onChange: (e) => setEditState({ ...editState, amountPaid: e.target.value }), className: inputCls + " max-w-xs", style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 mb-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), /* @__PURE__ */ React.createElement("input", { value: editState.collector, onChange: (e) => setEditState({ ...editState, collector: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }))), /* @__PURE__ */ React.createElement(PaymentTypeFields, { value: editState.paymentDetails, onChange: (pd) => setEditState({ ...editState, paymentDetails: pd }) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Current balance", value: naira(t.lastBalance + editTotalNewCharge - (Number(editState.amountPaid) || 0)), bold: true, accent: t.lastBalance + editTotalNewCharge - (Number(editState.amountPaid) || 0) > 0 ? "#a3341f" : TEAL }), /* @__PURE__ */ React.createElement("div", { className: "flex gap-3 mt-3" }, /* @__PURE__ */ React.createElement("button", { onClick: () => saveEdit(t), style: { background: TEAL, color: "#fff" }, className: "px-5 py-2 rounded-lg text-sm font-semibold" }, "Save changes"), /* @__PURE__ */ React.createElement("button", { onClick: closeEdit, style: { color: MUTED }, className: "text-sm" }, "Cancel")));
   })());
 }
 const NO_SALARY_REASONS = ["Holiday", "Offence", "Not in School", "Volunteer"];
@@ -3779,7 +3877,7 @@ function ReconciliationTab({ fin, session, tag, students }) {
     });
     return map;
   }, [dayTxForCollector]);
-  const systemTotal = useMemo(() => Object.values(systemByMethod).reduce((a, v) => a + v, 0), [systemByMethod]);
+  const systemTotal = useMemo(() => Object.entries(systemByMethod).reduce((a, [m, v]) => m === "Uncollected" ? a : a + v, 0), [systemByMethod]);
   const existingClosing = useMemo(
     () => closings.find((c) => c.date === date && c.collector === collector),
     [closings, date, collector]
@@ -3806,7 +3904,7 @@ function ReconciliationTab({ fin, session, tag, students }) {
   const relevantClosings = useMemo(() => {
     return closings.filter((c) => isCashier ? c.collector === session.fullName : true).sort((a, b) => b.date.localeCompare(a.date) || b.closedAt.localeCompare(a.closedAt));
   }, [closings, isCashier, session.fullName]);
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-base font-semibold mb-3" }, "Daily Cashier Closing"), note && /* @__PURE__ */ React.createElement(Banner, { kind: note.kind }, note.text), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 sans mb-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Date"), /* @__PURE__ */ React.createElement("input", { type: "date", value: date, onChange: (e) => setDate(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), isCashier ? /* @__PURE__ */ React.createElement("div", { className: "px-3 py-2 rounded-lg border text-sm", style: { borderColor: "#d8cfb8", background: "#faf7ef" } }, session.fullName) : /* @__PURE__ */ React.createElement("select", { value: collector, onChange: (e) => setCollector(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 select collector \u2014"), collectorOptions.map((c) => /* @__PURE__ */ React.createElement("option", { key: c }, c))))), collector && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs font-semibold uppercase tracking-wide mb-1" }, "System says"), PAYMENT_METHODS.map((m) => /* @__PURE__ */ React.createElement(SummaryRow, { key: m, label: m, value: naira(systemByMethod[m] || 0) })), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Total", value: naira(systemTotal), bold: true, accent: TEAL }), /* @__PURE__ */ React.createElement("div", { className: "mt-3 mb-2" }, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "sans text-xs font-medium block mb-1" }, "Amount handed over / reconciled"), /* @__PURE__ */ React.createElement("input", { type: "number", value: handedOver, onChange: (e) => setHandedOver(e.target.value), className: inputCls + " sans max-w-xs", style: { borderColor: "#d8cfb8" }, placeholder: existingClosing ? String(existingClosing.handedOver) : "" })), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Verified", value: naira(Number(handedOver) || 0) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Difference", value: naira(systemTotal - (Number(handedOver) || 0)), bold: true, accent: systemTotal - (Number(handedOver) || 0) === 0 ? TEAL : "#a3341f" }), existingClosing && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mt-2" }, "Already closed for this date by ", existingClosing.closedBy, " \u2014 saving again will overwrite it."), /* @__PURE__ */ React.createElement("button", { onClick: saveClosing, disabled: dayTxForCollector.length === 0 && systemTotal === 0, style: { background: TEAL, color: "#fff" }, className: "sans mt-3 px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, existingClosing ? "Update closing" : "Save closing"))), /* @__PURE__ */ React.createElement("h4", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, isCashier ? "Your past closings" : "All past closings"), /* @__PURE__ */ React.createElement(TableShell, { head: ["Date", "Collector", "System Total", "Handed Over", "Difference", "Closed By"] }, relevantClosings.length === 0 && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 6, className: "px-4 py-6 text-center", style: { color: MUTED } }, "No closings recorded yet.")), relevantClosings.map((c, i) => /* @__PURE__ */ React.createElement("tr", { key: c.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, c.date), /* @__PURE__ */ React.createElement(Td, null, c.collector), /* @__PURE__ */ React.createElement(Td, null, naira(c.systemTotal)), /* @__PURE__ */ React.createElement(Td, null, naira(c.handedOver)), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("span", { style: { color: c.difference === 0 ? TEAL : "#a3341f" } }, naira(c.difference))), /* @__PURE__ */ React.createElement(Td, null, c.closedBy)))));
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-base font-semibold mb-3" }, "Daily Cashier Closing"), note && /* @__PURE__ */ React.createElement(Banner, { kind: note.kind }, note.text), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 sans mb-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Date"), /* @__PURE__ */ React.createElement("input", { type: "date", value: date, onChange: (e) => setDate(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), isCashier ? /* @__PURE__ */ React.createElement("div", { className: "px-3 py-2 rounded-lg border text-sm", style: { borderColor: "#d8cfb8", background: "#faf7ef" } }, session.fullName) : /* @__PURE__ */ React.createElement("select", { value: collector, onChange: (e) => setCollector(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 select collector \u2014"), collectorOptions.map((c) => /* @__PURE__ */ React.createElement("option", { key: c }, c))))), collector && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs font-semibold uppercase tracking-wide mb-1" }, "System says"), PAYMENT_METHODS.map((m) => /* @__PURE__ */ React.createElement(SummaryRow, { key: m, label: m + (m === "Uncollected" ? " (not counted below)" : ""), value: naira(systemByMethod[m] || 0) })), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Total", value: naira(systemTotal), bold: true, accent: TEAL }), /* @__PURE__ */ React.createElement("div", { className: "mt-3 mb-2" }, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "sans text-xs font-medium block mb-1" }, "Amount handed over / reconciled"), /* @__PURE__ */ React.createElement("input", { type: "number", value: handedOver, onChange: (e) => setHandedOver(e.target.value), className: inputCls + " sans max-w-xs", style: { borderColor: "#d8cfb8" }, placeholder: existingClosing ? String(existingClosing.handedOver) : "" })), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Verified", value: naira(Number(handedOver) || 0) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Difference", value: naira(systemTotal - (Number(handedOver) || 0)), bold: true, accent: systemTotal - (Number(handedOver) || 0) === 0 ? TEAL : "#a3341f" }), existingClosing && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mt-2" }, "Already closed for this date by ", existingClosing.closedBy, " \u2014 saving again will overwrite it."), /* @__PURE__ */ React.createElement("button", { onClick: saveClosing, disabled: dayTxForCollector.length === 0 && systemTotal === 0, style: { background: TEAL, color: "#fff" }, className: "sans mt-3 px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, existingClosing ? "Update closing" : "Save closing"))), /* @__PURE__ */ React.createElement("h4", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, isCashier ? "Your past closings" : "All past closings"), /* @__PURE__ */ React.createElement(TableShell, { head: ["Date", "Collector", "System Total", "Handed Over", "Difference", "Closed By"] }, relevantClosings.length === 0 && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 6, className: "px-4 py-6 text-center", style: { color: MUTED } }, "No closings recorded yet.")), relevantClosings.map((c, i) => /* @__PURE__ */ React.createElement("tr", { key: c.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, c.date), /* @__PURE__ */ React.createElement(Td, null, c.collector), /* @__PURE__ */ React.createElement(Td, null, naira(c.systemTotal)), /* @__PURE__ */ React.createElement(Td, null, naira(c.handedOver)), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("span", { style: { color: c.difference === 0 ? TEAL : "#a3341f" } }, naira(c.difference))), /* @__PURE__ */ React.createElement(Td, null, c.closedBy)))));
 }
 function CollectorReportTab({ fin, students }) {
   const [from, setFrom] = useState(today());
@@ -4730,9 +4828,7 @@ function AttendanceModule({ canMarkPupils, canMarkStaff, actorName, canOverride,
   const [subtab, setSubtab] = useState("dashboard");
   const [selTown, setSelTown] = useState(TOWNS[0]);
   const [selClassId, setSelClassId] = useState(""), [selArm, setSelArm] = useState(""), [selDate, setSelDate] = useState(today());
-  const [draft, setDraft] = useState({});
   const [staffDate, setStaffDate] = useState(today());
-  const [staffDraft, setStaffDraft] = useState({});
   const [scanMsg, setScanMsg] = useState(null);
   const [summaryFrom, setSummaryFrom] = useState(today().slice(0, 8) + "01");
   const [summaryTo, setSummaryTo] = useState(today());
@@ -4757,90 +4853,95 @@ function AttendanceModule({ canMarkPupils, canMarkStaff, actorName, canOverride,
   const classObj = tag === "teacher" && classObjFull ? { ...classObjFull, arms: classObjFull.arms.filter((a) => a.teacherId === personId) } : classObjFull;
   const roster = students.filter((s) => classObj && s.town === classObj.town && (s.enrollments || []).some((en) => en.className === classObj.name && en.arm === selArm));
   const dayKey = `${selClassId}__${selArm}__${selDate}`;
-  useEffect(() => {
-    if (!att || !selClassId || !selArm) return;
-    const saved = att.student[dayKey] || {};
-    const d = {};
-    roster.forEach((s) => {
-      d[s.id] = normalizeAttEntry(saved[s.id], "Present");
-    });
-    setDraft(d);
-  }, [selClassId, selArm, selDate, att]);
-  useEffect(() => {
-    if (!att) return;
-    const saved = att.staff[staffDate] || {};
-    const d = {};
-    staff.forEach((s) => {
-      d[s.id] = normalizeAttEntry(saved[s.id], "Present");
-    });
-    setStaffDraft(d);
-  }, [staffDate, att, staff]);
-  async function saveStudentAtt() {
-    const prevSaved = att.student[dayKey] || {};
-    const auditEntries = [];
-    const nextAtt = { ...att, student: { ...att.student, [dayKey]: draft } };
-    Object.entries(draft).forEach(([sid, entry]) => {
-      const prev = prevSaved[sid];
-      if (prev && prev.status && prev.status !== entry.status) {
-        const s = students.find((x) => x.id === sid);
-        auditEntries.push(makeAuditEntry({
-          actorName,
-          personKind: "student",
-          personId: sid,
-          personName: (s == null ? void 0 : s.fullName) || sid,
-          date: selDate,
-          context: `${(classObj == null ? void 0 : classObj.name) || ""} ${selArm}`.trim(),
-          previousStatus: prev.status,
-          newStatus: entry.status,
-          reason: entry.reason
-        }));
-      }
-    });
+  function rowEntry(saved) {
+    if (!saved) return { status: "", reason: "", reasonStatus: "", timeIn: "", timeOut: "", source: "Manual" };
+    if (typeof saved === "string") return { status: saved, reason: "", reasonStatus: "", timeIn: "", timeOut: "", source: "Manual" };
+    return { status: saved.status || "", reason: saved.reason || "", reasonStatus: saved.reasonStatus || "", timeIn: saved.timeIn || "", timeOut: saved.timeOut || "", source: saved.source || "Manual" };
+  }
+  async function markStudentAttendance(sid, status) {
+    const now = /* @__PURE__ */ new Date();
+    const timeStr = now.toTimeString().slice(0, 5);
+    const daySaved = att.student[dayKey] || {};
+    const prevEntry = daySaved[sid];
+    const nextEntry = {
+      status,
+      reason: status === "Present" ? "" : (prevEntry && prevEntry.reason) || "",
+      reasonStatus: status === "Present" ? "" : (prevEntry && prevEntry.reasonStatus) || "",
+      timeIn: status === "Present" || status === "Late" ? timeStr : "",
+      timeOut: (prevEntry && prevEntry.timeOut) || "",
+      source: "Manual"
+    };
+    const nextAtt = { ...att, student: { ...att.student, [dayKey]: { ...daySaved, [sid]: nextEntry } } };
     await persist(nextAtt);
-    if (auditEntries.length) await appendAuditEntries(auditEntries);
-    for (const [sid, entry] of Object.entries(draft)) {
-      if (entry.status !== "Absent") continue;
+    if (prevEntry && prevEntry.status && prevEntry.status !== status) {
       const s = students.find((x) => x.id === sid);
-      if (!s) continue;
-      await pushAttendanceNotice({ kind: "absent", personKind: "student", personId: sid, personName: s.fullName, date: selDate, message: `${s.fullName} was marked Absent on ${selDate}${classObj ? ` (${classObj.name} ${selArm})` : ""}.` });
-      const windowRows = flattenStudentAttendance(nextAtt, classes, addDays(selDate, -29), selDate).filter((r) => r.studentId === sid);
-      const absentDates = new Set(windowRows.filter((r) => r.status === "Absent").map((r) => r.date));
-      if (absentDates.size >= (settings.notifyAfterAbsences || 3)) {
-        await pushAttendanceNotice({ kind: "repeated-absent", personKind: "student", personId: sid, personName: s.fullName, date: selDate, message: `${s.fullName} has been Absent ${absentDates.size} day(s) in the last 30 days (as of ${selDate}).` });
+      await appendAuditEntries([makeAuditEntry({
+        actorName,
+        personKind: "student",
+        personId: sid,
+        personName: (s == null ? void 0 : s.fullName) || sid,
+        date: selDate,
+        context: `${(classObj == null ? void 0 : classObj.name) || ""} ${selArm}`.trim(),
+        previousStatus: prevEntry.status,
+        newStatus: status,
+        reason: nextEntry.reason
+      })]);
+    }
+    if (status === "Absent") {
+      const s = students.find((x) => x.id === sid);
+      if (s) {
+        await pushAttendanceNotice({ kind: "absent", personKind: "student", personId: sid, personName: s.fullName, date: selDate, message: `${s.fullName} was marked Absent on ${selDate}${classObj ? ` (${classObj.name} ${selArm})` : ""}.` });
+        const windowRows = flattenStudentAttendance(nextAtt, classes, addDays(selDate, -29), selDate).filter((r) => r.studentId === sid);
+        const absentDates = new Set(windowRows.filter((r) => r.status === "Absent").map((r) => r.date));
+        if (absentDates.size >= (settings.notifyAfterAbsences || 3)) {
+          await pushAttendanceNotice({ kind: "repeated-absent", personKind: "student", personId: sid, personName: s.fullName, date: selDate, message: `${s.fullName} has been Absent ${absentDates.size} day(s) in the last 30 days (as of ${selDate}).` });
+        }
       }
     }
   }
-  async function saveStaffAtt() {
-    const prevSaved = att.staff[staffDate] || {};
-    const auditEntries = [];
-    Object.entries(staffDraft).forEach(([sid, entry]) => {
-      const prev = prevSaved[sid];
-      if (prev && prev.status && prev.status !== entry.status) {
-        const s = staff.find((x) => x.id === sid);
-        auditEntries.push(makeAuditEntry({
-          actorName,
-          personKind: "staff",
-          personId: sid,
-          personName: (s == null ? void 0 : s.fullName) || sid,
-          date: staffDate,
-          previousStatus: prev.status,
-          newStatus: entry.status,
-          reason: entry.reason
-        }));
-      }
-    });
-    await persist({ ...att, staff: { ...att.staff, [staffDate]: staffDraft } });
-    if (auditEntries.length) await appendAuditEntries(auditEntries);
-    for (const [sid, entry] of Object.entries(staffDraft)) {
-      if (entry.status !== "Absent") continue;
+  async function setStudentReason(sid, patch) {
+    const daySaved = att.student[dayKey] || {};
+    const prevEntry = daySaved[sid] || { status: "Absent", reason: "", reasonStatus: "", timeIn: "", timeOut: "", source: "Manual" };
+    await persist({ ...att, student: { ...att.student, [dayKey]: { ...daySaved, [sid]: { ...prevEntry, ...patch } } } });
+  }
+  async function markStaffAttendance(sid, status) {
+    const now = /* @__PURE__ */ new Date();
+    const timeStr = now.toTimeString().slice(0, 5);
+    const daySaved = att.staff[staffDate] || {};
+    const prevEntry = daySaved[sid];
+    const nextEntry = {
+      status,
+      reason: status === "Present" ? "" : (prevEntry && prevEntry.reason) || "",
+      reasonStatus: status === "Present" ? "" : (prevEntry && prevEntry.reasonStatus) || "",
+      timeIn: status === "Present" || status === "Late" ? timeStr : "",
+      timeOut: (prevEntry && prevEntry.timeOut) || "",
+      source: "Manual"
+    };
+    await persist({ ...att, staff: { ...att.staff, [staffDate]: { ...daySaved, [sid]: nextEntry } } });
+    if (prevEntry && prevEntry.status && prevEntry.status !== status) {
       const s = staff.find((x) => x.id === sid);
-      if (!s) continue;
-      await pushAttendanceNotice({ kind: "staff-absent", personKind: "staff", personId: sid, personName: s.fullName, date: staffDate, message: `${s.fullName} was marked Absent on ${staffDate}.` });
+      await appendAuditEntries([makeAuditEntry({
+        actorName,
+        personKind: "staff",
+        personId: sid,
+        personName: (s == null ? void 0 : s.fullName) || sid,
+        date: staffDate,
+        previousStatus: prevEntry.status,
+        newStatus: status,
+        reason: nextEntry.reason
+      })]);
+    }
+    if (status === "Absent") {
+      const s = staff.find((x) => x.id === sid);
+      if (s) {
+        await pushAttendanceNotice({ kind: "staff-absent", personKind: "staff", personId: sid, personName: s.fullName, date: staffDate, message: `${s.fullName} was marked Absent on ${staffDate}.` });
+      }
     }
   }
-  function setEntry(setFn, current, id, patch) {
-    const prev = current[id] || normalizeAttEntry(null, "Present");
-    setFn({ ...current, [id]: { ...prev, ...patch } });
+  async function setStaffReason(sid, patch) {
+    const daySaved = att.staff[staffDate] || {};
+    const prevEntry = daySaved[sid] || { status: "Absent", reason: "", reasonStatus: "", timeIn: "", timeOut: "", source: "Manual" };
+    await persist({ ...att, staff: { ...att.staff, [staffDate]: { ...daySaved, [sid]: { ...prevEntry, ...patch } } } });
   }
   function findClassId(en, town) {
     const c = classes.find((c2) => c2.town === town && c2.section === en.section && c2.name === en.className);
@@ -4957,39 +5058,39 @@ function AttendanceModule({ canMarkPupils, canMarkStaff, actorName, canOverride,
     const sectionWindowThatDay = classObj ? getSectionWindowForDate(classObj.section, /* @__PURE__ */ new Date(selDate + "T00:00:00"), (_a = settings.holidays) == null ? void 0 : _a.map((h) => h.date)) : null;
     const notInSession = classObj && !sectionWindowThatDay;
     const blocked = isLocked || notInSession;
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, isLocked && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, "This date (", selDate, ") is locked \u2014 only an admin/owner can edit attendance after the day has passed. Contact an administrator if a correction is needed."), !isLocked && notInSession && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, classObj.section, " doesn't meet on ", selDate, " \u2014 attendance can't be recorded for a non-school day."), /* @__PURE__ */ React.createElement(TableShell, { head: ["Pupil", "Status", "Reason / time-in"] }, roster.map((s, i) => {
-      const e = draft[s.id] || normalizeAttEntry(null, "Present");
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, isLocked && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, "This date (", selDate, ") is locked \u2014 only an admin/owner can edit attendance after the day has passed. Contact an administrator if a correction is needed."), !isLocked && notInSession && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, classObj.section, " doesn't meet on ", selDate, " \u2014 attendance can't be recorded for a non-school day."), !blocked && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-2" }, "Tap a status \u2014 it saves immediately, no separate Save button."), /* @__PURE__ */ React.createElement(TableShell, { head: ["Pupil", "Status", "Reason / time-in"] }, roster.map((s, i) => {
+      const e = rowEntry((att.student[dayKey] || {})[s.id]);
       return /* @__PURE__ */ React.createElement("tr", { key: s.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, s.fullName), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("div", { className: "flex gap-1.5 flex-wrap" }, ["Present", "Absent", "Late", "Excused"].map((st) => /* @__PURE__ */ React.createElement(
         "button",
         {
           key: st,
           disabled: blocked,
-          onClick: () => setEntry(setDraft, draft, s.id, st === "Present" ? { status: st, reason: "", reasonStatus: "" } : { status: st }),
+          onClick: () => markStudentAttendance(s.id, st),
           style: { background: e.status === st ? "#e7f0ea" : "#fff", color: e.status === st ? TEAL : MUTED, border: `1px solid ${e.status === st ? TEAL : "#d8cfb8"}`, opacity: blocked ? 0.5 : 1, cursor: blocked ? "not-allowed" : "pointer" },
           className: "text-xs px-2.5 py-1 rounded-full"
         },
         st
-      )))), /* @__PURE__ */ React.createElement(Td, null, e.status !== "Present" ? /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ React.createElement("input", { disabled: blocked, placeholder: "Reason (optional)", value: e.reason, onChange: (ev) => setEntry(setDraft, draft, s.id, { reason: ev.target.value, reasonStatus: ev.target.value.trim() ? e.reasonStatus || "Pending" : "" }), className: "text-xs rounded-lg px-2 py-1 border", style: { borderColor: "#d8cfb8", minWidth: 150 } }), e.reason && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { disabled: blocked, onClick: () => setEntry(setDraft, draft, s.id, { reasonStatus: "Accepted" }), style: { background: e.reasonStatus === "Accepted" ? "#e7f0ea" : "#fff", color: e.reasonStatus === "Accepted" ? TEAL : MUTED, border: `1px solid ${e.reasonStatus === "Accepted" ? TEAL : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Accept"), /* @__PURE__ */ React.createElement("button", { disabled: blocked, onClick: () => setEntry(setDraft, draft, s.id, { reasonStatus: "Rejected" }), style: { background: e.reasonStatus === "Rejected" ? "#fbe9e7" : "#fff", color: e.reasonStatus === "Rejected" ? "#a3341f" : MUTED, border: `1px solid ${e.reasonStatus === "Rejected" ? "#a3341f" : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Reject"))) : null, e.timeIn && /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs block mt-1" }, e.source === "Scan" ? "Scanned in" : "In", ": ", e.timeIn)));
-    })), /* @__PURE__ */ React.createElement("button", { onClick: saveStudentAtt, disabled: blocked, style: { background: GOLD, color: INK, opacity: blocked ? 0.5 : 1, cursor: blocked ? "not-allowed" : "pointer" }, className: "sans mt-3 px-4 py-2 rounded-lg text-sm font-semibold" }, isLocked ? "Locked" : notInSession ? "Not a school day" : "Save Attendance"));
+      )))), /* @__PURE__ */ React.createElement(Td, null, e.status && e.status !== "Present" ? /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ React.createElement("input", { disabled: blocked, placeholder: "Reason (optional)", defaultValue: e.reason, onBlur: (ev) => setStudentReason(s.id, { reason: ev.target.value, reasonStatus: ev.target.value.trim() ? e.reasonStatus || "Pending" : "" }), className: "text-xs rounded-lg px-2 py-1 border", style: { borderColor: "#d8cfb8", minWidth: 150 } }), e.reason && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { disabled: blocked, onClick: () => setStudentReason(s.id, { reasonStatus: "Accepted" }), style: { background: e.reasonStatus === "Accepted" ? "#e7f0ea" : "#fff", color: e.reasonStatus === "Accepted" ? TEAL : MUTED, border: `1px solid ${e.reasonStatus === "Accepted" ? TEAL : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Accept"), /* @__PURE__ */ React.createElement("button", { disabled: blocked, onClick: () => setStudentReason(s.id, { reasonStatus: "Rejected" }), style: { background: e.reasonStatus === "Rejected" ? "#fbe9e7" : "#fff", color: e.reasonStatus === "Rejected" ? "#a3341f" : MUTED, border: `1px solid ${e.reasonStatus === "Rejected" ? "#a3341f" : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Reject"))) : null, e.timeIn && /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs block mt-1" }, e.source === "Scan" ? "Scanned in" : "In", ": ", e.timeIn)));
+    })));
   })()), subtab === "staff" && canMarkStaff && (() => {
     const staffLocked = settings.lockAttendanceAfterDay && staffDate !== today() && !canOverride;
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-2" }, "Scan-in marks a staff member Present (or Late, based on the earliest of their sections meeting today) right now, today \u2014 separate from the date picker below."), /* @__PURE__ */ React.createElement(ScanBox, { onSubmit: scanStaff, placeholder: "Scan staff ID card here, or type ID and press Enter" }), todaysWindows.length > 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mt-2" }, "In session today: ", todaysWindows.map(({ section, window: window2 }) => {
       var _a;
       return `${section} (${window2.start}\u2013${window2.end}, late after ${minutesToHHMM(minutesSinceMidnight(window2.start) + ((_a = settings.graceMinutes) != null ? _a : LATE_GRACE_MINUTES))})`;
-    }).join(" \xB7 "))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("input", { type: "date", value: staffDate, onChange: (e) => setStaffDate(e.target.value), className: inputCls + " max-w-xs sans", style: { borderColor: "#d8cfb8" } })), staffLocked && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, "This date (", staffDate, ") is locked \u2014 only an admin/owner can edit attendance after the day has passed. Contact an administrator if a correction is needed."), /* @__PURE__ */ React.createElement(TableShell, { head: ["Staff", "Status", "Reason / time-in"] }, staff.map((s, i) => {
-      const e = staffDraft[s.id] || normalizeAttEntry(null, "Present");
+    }).join(" \xB7 "))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("input", { type: "date", value: staffDate, onChange: (e) => setStaffDate(e.target.value), className: inputCls + " max-w-xs sans", style: { borderColor: "#d8cfb8" } })), staffLocked && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, "This date (", staffDate, ") is locked \u2014 only an admin/owner can edit attendance after the day has passed. Contact an administrator if a correction is needed."), !staffLocked && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-2" }, "Tap a status \u2014 it saves immediately, no separate Save button."), /* @__PURE__ */ React.createElement(TableShell, { head: ["Staff", "Status", "Reason / time-in"] }, staff.map((s, i) => {
+      const e = rowEntry((att.staff[staffDate] || {})[s.id]);
       return /* @__PURE__ */ React.createElement("tr", { key: s.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, s.fullName), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("div", { className: "flex gap-1.5 flex-wrap" }, ["Present", "Absent", "On Leave", "Late"].map((st) => /* @__PURE__ */ React.createElement(
         "button",
         {
           key: st,
           disabled: staffLocked,
-          onClick: () => setEntry(setStaffDraft, staffDraft, s.id, st === "Present" ? { status: st, reason: "", reasonStatus: "" } : { status: st }),
+          onClick: () => markStaffAttendance(s.id, st),
           style: { background: e.status === st ? "#e7f0ea" : "#fff", color: e.status === st ? TEAL : MUTED, border: `1px solid ${e.status === st ? TEAL : "#d8cfb8"}`, opacity: staffLocked ? 0.5 : 1, cursor: staffLocked ? "not-allowed" : "pointer" },
           className: "text-xs px-2.5 py-1 rounded-full"
         },
         st
-      )))), /* @__PURE__ */ React.createElement(Td, null, e.status !== "Present" ? /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ React.createElement("input", { disabled: staffLocked, placeholder: "Reason (optional)", value: e.reason, onChange: (ev) => setEntry(setStaffDraft, staffDraft, s.id, { reason: ev.target.value, reasonStatus: ev.target.value.trim() ? e.reasonStatus || "Pending" : "" }), className: "text-xs rounded-lg px-2 py-1 border", style: { borderColor: "#d8cfb8", minWidth: 150 } }), e.reason && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { disabled: staffLocked, onClick: () => setEntry(setStaffDraft, staffDraft, s.id, { reasonStatus: "Accepted" }), style: { background: e.reasonStatus === "Accepted" ? "#e7f0ea" : "#fff", color: e.reasonStatus === "Accepted" ? TEAL : MUTED, border: `1px solid ${e.reasonStatus === "Accepted" ? TEAL : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Accept"), /* @__PURE__ */ React.createElement("button", { disabled: staffLocked, onClick: () => setEntry(setStaffDraft, staffDraft, s.id, { reasonStatus: "Rejected" }), style: { background: e.reasonStatus === "Rejected" ? "#fbe9e7" : "#fff", color: e.reasonStatus === "Rejected" ? "#a3341f" : MUTED, border: `1px solid ${e.reasonStatus === "Rejected" ? "#a3341f" : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Reject"))) : null, e.timeIn && /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs block mt-1" }, e.source === "Scan" ? "Scanned in" : "In", ": ", e.timeIn)));
-    })), /* @__PURE__ */ React.createElement("button", { onClick: saveStaffAtt, disabled: staffLocked, style: { background: GOLD, color: INK, opacity: staffLocked ? 0.5 : 1, cursor: staffLocked ? "not-allowed" : "pointer" }, className: "sans mt-3 px-4 py-2 rounded-lg text-sm font-semibold" }, staffLocked ? "Locked" : "Save Attendance"));
+      )))), /* @__PURE__ */ React.createElement(Td, null, e.status && e.status !== "Present" ? /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ React.createElement("input", { disabled: staffLocked, placeholder: "Reason (optional)", defaultValue: e.reason, onBlur: (ev) => setStaffReason(s.id, { reason: ev.target.value, reasonStatus: ev.target.value.trim() ? e.reasonStatus || "Pending" : "" }), className: "text-xs rounded-lg px-2 py-1 border", style: { borderColor: "#d8cfb8", minWidth: 150 } }), e.reason && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { disabled: staffLocked, onClick: () => setStaffReason(s.id, { reasonStatus: "Accepted" }), style: { background: e.reasonStatus === "Accepted" ? "#e7f0ea" : "#fff", color: e.reasonStatus === "Accepted" ? TEAL : MUTED, border: `1px solid ${e.reasonStatus === "Accepted" ? TEAL : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Accept"), /* @__PURE__ */ React.createElement("button", { disabled: staffLocked, onClick: () => setStaffReason(s.id, { reasonStatus: "Rejected" }), style: { background: e.reasonStatus === "Rejected" ? "#fbe9e7" : "#fff", color: e.reasonStatus === "Rejected" ? "#a3341f" : MUTED, border: `1px solid ${e.reasonStatus === "Rejected" ? "#a3341f" : "#d8cfb8"}` }, className: "text-xs px-2 py-1 rounded-full" }, "Reject"))) : null, e.timeIn && /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs block mt-1" }, e.source === "Scan" ? "Scanned in" : "In", ": ", e.timeIn)));
+    })));
   })(), subtab === "summary" && canMarkStaff && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-3" }, "Penalty amounts come from Settings \u2192 Staff lateness/absence penalty. A day whose reason was Accepted is excluded. This is a suggested figure only \u2014 it does not change Finance/salary automatically."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 items-center" }, /* @__PURE__ */ React.createElement("input", { type: "date", value: summaryFrom, onChange: (e) => setSummaryFrom(e.target.value), className: inputCls + " max-w-xs sans", style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, "to"), /* @__PURE__ */ React.createElement("input", { type: "date", value: summaryTo, onChange: (e) => setSummaryTo(e.target.value), className: inputCls + " max-w-xs sans", style: { borderColor: "#d8cfb8" } }))), /* @__PURE__ */ React.createElement(TableShell, { head: ["Staff", "Present", "Late", "Absent", "On Leave", "Suggested Penalty"] }, staffSummary.map(({ staff: s, present, late, absent, onLeave, penalty }, i) => /* @__PURE__ */ React.createElement("tr", { key: s.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, s.fullName), /* @__PURE__ */ React.createElement(Td, null, present), /* @__PURE__ */ React.createElement(Td, null, late), /* @__PURE__ */ React.createElement(Td, null, absent), /* @__PURE__ */ React.createElement(Td, null, onLeave), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("span", { style: { color: penalty > 0 ? "#a3341f" : MUTED } }, naira(penalty))))))));
 }
 const BOOK_ITEM_TYPES = ["Western Books", "Muzakkira", "Huruf", "Arabic Book"];
