@@ -1462,6 +1462,76 @@ async function shareOrDownloadImage(dataUrl, filename) {
   }
   return downloadDataUrl(dataUrl, filename) ? "downloaded" : "failed";
 }
+async function generateFamilyBillImage(familyLabel, rows, totals) {
+  const W = 720, rowH = 46, headerH = 230, footerH = 130;
+  const H = headerH + 40 + rows.length * rowH + 90 + footerH;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = INK;
+  ctx.fillRect(0, 0, W, 90);
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 24px sans-serif";
+  ctx.fillText("MTAF Portal \u2014 Family Bill", 30, 40);
+  ctx.font = "13px sans-serif";
+  ctx.fillStyle = "#c9c2ac";
+  ctx.fillText(`Generated ${(/* @__PURE__ */ new Date()).toLocaleString()}`, 30, 66);
+  ctx.fillStyle = INK;
+  ctx.font = "bold 20px sans-serif";
+  ctx.fillText(familyLabel || "Family", 30, 130);
+  ctx.font = "13px sans-serif";
+  ctx.fillStyle = MUTED;
+  ctx.fillText(`${rows.length} pupil(s) on this bill`, 30, 152);
+  let y = 190;
+  ctx.font = "bold 13px sans-serif";
+  ctx.fillStyle = MUTED;
+  ["Pupil", "Billed", "Paid", "Balance"].forEach((h, i) => ctx.fillText(h, 30 + i * 175, y));
+  y += 14;
+  ctx.strokeStyle = "#eee6d3";
+  ctx.beginPath();
+  ctx.moveTo(30, y);
+  ctx.lineTo(W - 30, y);
+  ctx.stroke();
+  y += 30;
+  ctx.font = "15px sans-serif";
+  rows.forEach((r) => {
+    ctx.fillStyle = TEXT;
+    ctx.fillText(r.name, 30, y);
+    ctx.fillStyle = MUTED;
+    ctx.fillText(naira(r.billed), 205, y);
+    ctx.fillText(naira(r.paid), 380, y);
+    ctx.fillStyle = r.balance > 0 ? "#a3341f" : TEAL;
+    ctx.fillText(naira(r.balance), 555, y);
+    y += rowH;
+  });
+  y += 10;
+  ctx.strokeStyle = "#eee6d3";
+  ctx.beginPath();
+  ctx.moveTo(30, y);
+  ctx.lineTo(W - 30, y);
+  ctx.stroke();
+  y += 36;
+  ctx.font = "bold 18px sans-serif";
+  ctx.fillStyle = INK;
+  ctx.fillText("TOTAL BALANCE DUE", 30, y);
+  ctx.fillStyle = totals.balance > 0 ? "#a3341f" : TEAL;
+  ctx.fillText(naira(totals.balance), 400, y);
+  y += 36;
+  ctx.font = "13px sans-serif";
+  ctx.fillStyle = MUTED;
+  ctx.fillText(`Total billed: ${naira(totals.billed)}    Total paid: ${naira(totals.paid)}`, 30, y);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(0, H - 34, W, 34);
+  ctx.fillStyle = INK;
+  ctx.font = "13px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("This is a summary of the most recent balance for each pupil, not an itemized receipt.", W / 2, H - 12);
+  ctx.textAlign = "left";
+  return canvas.toDataURL("image/png");
+}
 function printHtml(innerHtml) {
   const area = document.getElementById("mtaf-print-area");
   if (!area) return false;
@@ -2544,7 +2614,8 @@ function RecordsModule({ only, tag } = {}) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [enrollDraft, setEnrollDraft] = useState({ town: TOWNS[0], section: SECTIONS[0], className: "", arm: "A", status: "Active", admissionDate: today(), previousSchool: "", previousClass: "", reasonForLeaving: "" });
   const [enrollError, setEnrollError] = useState("");
-  const [staffRoleDraft, setStaffRoleDraft] = useState({ section: SECTIONS[0], role: ROLES[0], salary: "", status: "Active", appointmentDate: today() });
+  const [staffRoleDraft, setStaffRoleDraft] = useState({ section: SECTIONS[0], role: ROLES[0], customRole: "", salary: "", status: "Active", appointmentDate: today() });
+  const [customRoleError, setCustomRoleError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [classes, setClasses] = useState([]);
   const [filterTown, setFilterTown] = useState("All");
@@ -2649,15 +2720,30 @@ function RecordsModule({ only, tag } = {}) {
   function addStaffSectionRole() {
     const exists = (form.sectionRoles || []).some((sr) => sr.section === staffRoleDraft.section);
     if (exists) return;
-    setForm({ ...form, sectionRoles: [...form.sectionRoles || [], { ...staffRoleDraft, salary: Number(staffRoleDraft.salary) || 0 }] });
-    setStaffRoleDraft({ ...staffRoleDraft, salary: "" });
+    let finalRole = staffRoleDraft.role;
+    if (staffRoleDraft.role === "Other") {
+      const custom = staffRoleDraft.customRole.trim();
+      if (!custom) {
+        setCustomRoleError("Type a name for this role (e.g. Secretary, Nanny).");
+        return;
+      }
+      if (ROLES.some((r) => r.toLowerCase() === custom.toLowerCase())) {
+        setCustomRoleError(`"${custom}" is already one of the built-in roles \u2014 pick it from the list above instead of typing it here.`);
+        return;
+      }
+      finalRole = custom;
+    }
+    setCustomRoleError("");
+    setForm({ ...form, sectionRoles: [...form.sectionRoles || [], { section: staffRoleDraft.section, role: finalRole, salary: Number(staffRoleDraft.salary) || 0, status: staffRoleDraft.status, appointmentDate: staffRoleDraft.appointmentDate }] });
+    setStaffRoleDraft({ ...staffRoleDraft, salary: "", customRole: "" });
   }
   function removeStaffSectionRole(idx) {
     setForm({ ...form, sectionRoles: form.sectionRoles.filter((_, i) => i !== idx) });
   }
   function editStaffSectionRole(idx) {
     const sr = form.sectionRoles[idx];
-    setStaffRoleDraft({ section: sr.section, role: sr.role, salary: sr.salary || "", status: sr.status || "Active", appointmentDate: sr.appointmentDate || today() });
+    const isCustom = !ROLES.includes(sr.role);
+    setStaffRoleDraft({ section: sr.section, role: isCustom ? "Other" : sr.role, customRole: isCustom ? sr.role : "", salary: sr.salary || "", status: sr.status || "Active", appointmentDate: sr.appointmentDate || today() });
     setForm({ ...form, sectionRoles: form.sectionRoles.filter((_, i) => i !== idx) });
   }
   const filterClassOptions = useMemo(() => {
@@ -2791,7 +2877,13 @@ function RecordsModule({ only, tag } = {}) {
   })(), /* @__PURE__ */ React.createElement("input", { type: "date", value: enrollDraft.admissionDate || "", onChange: (e) => setEnrollDraft({ ...enrollDraft, admissionDate: e.target.value }), title: "Admission date for this section", className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: addEnrollment, style: { background: GOLD, color: INK }, className: "px-3 py-2 rounded-lg text-sm font-semibold" }, "+ Add")), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 mt-2" }, /* @__PURE__ */ React.createElement("input", { value: enrollDraft.previousSchool || "", onChange: (e) => setEnrollDraft({ ...enrollDraft, previousSchool: e.target.value }), placeholder: "Previous school (if transferred in, for this section)", className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { value: enrollDraft.previousClass || "", onChange: (e) => setEnrollDraft({ ...enrollDraft, previousClass: e.target.value }), placeholder: "Previous class", className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { value: enrollDraft.reasonForLeaving || "", onChange: (e) => setEnrollDraft({ ...enrollDraft, reasonForLeaving: e.target.value }), placeholder: "Reason for leaving previous school", className: inputCls, style: { borderColor: "#d8cfb8" } })), enrollError && /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-xs mt-1" }, enrollError), classes.filter((c) => c.town === enrollDraft.town && c.section === enrollDraft.section).length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-xs mt-1" }, "No classes set up yet for ", enrollDraft.section, " in ", enrollDraft.town, " \u2014 add them in Classes first.")) : /* @__PURE__ */ React.createElement("div", { className: "mt-4" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Sections, role & salary in each \u2014 role and monthly salary can differ per section"), (form.sectionRoles || []).length > 0 && /* @__PURE__ */ React.createElement("div", { className: "space-y-1 mb-2" }, form.sectionRoles.map((sr, i) => /* @__PURE__ */ React.createElement("div", { key: i, className: "flex flex-wrap items-center justify-between gap-2 text-sm py-1.5 px-2 rounded", style: { background: "#faf7ef" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { color: TEXT } }, sr.section, " \u2014 ", /* @__PURE__ */ React.createElement("strong", null, sr.role), " \u2014 ", naira(sr.salary || 0), "/month"), /* @__PURE__ */ React.createElement("div", { className: "text-xs", style: { color: MUTED } }, "Appointed ", sr.appointmentDate || "\u2014")), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement("select", { value: sr.status || "Active", onChange: (e) => {
     const sectionRoles = form.sectionRoles.map((x, xi) => xi === i ? { ...x, status: e.target.value } : x);
     setForm({ ...form, sectionRoles });
-  }, className: "text-xs rounded px-1.5 py-1 border", style: { borderColor: "#d8cfb8", color: sr.status === "Inactive" ? "#a3341f" : TEXT } }, ["Active", "Inactive"].map((st) => /* @__PURE__ */ React.createElement("option", { key: st }, st))), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => editStaffSectionRole(i), color: TEAL }, "Edit"), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => removeStaffSectionRole(i), color: "#a3341f" }, "Remove"))))), /* @__PURE__ */ React.createElement("div", { className: "text-xs pt-1", style: { color: MUTED } }, "Total monthly salary: ", /* @__PURE__ */ React.createElement("strong", { style: { color: TEAL } }, naira(staffSalaryTotal(form)))), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-5 gap-2" }, /* @__PURE__ */ React.createElement("select", { value: staffRoleDraft.section, onChange: (e) => setStaffRoleDraft({ ...staffRoleDraft, section: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s))), /* @__PURE__ */ React.createElement("select", { value: staffRoleDraft.role, onChange: (e) => setStaffRoleDraft({ ...staffRoleDraft, role: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, ROLES.map((r) => /* @__PURE__ */ React.createElement("option", { key: r }, r))), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "Salary (\u20A6)", value: staffRoleDraft.salary, onChange: (e) => setStaffRoleDraft({ ...staffRoleDraft, salary: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { type: "date", value: staffRoleDraft.appointmentDate || "", onChange: (e) => setStaffRoleDraft({ ...staffRoleDraft, appointmentDate: e.target.value }), title: "Appointment date for this section", className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: addStaffSectionRole, style: { background: GOLD, color: INK }, className: "px-3 py-2 rounded-lg text-sm font-semibold" }, "+ Add"))), /* @__PURE__ */ React.createElement("div", { className: "mt-4" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs font-medium block mb-1.5" }, "Module access override \u2014 leave as Default to use the normal access for this person's role; Always allow / Always block overrides it just for them."), /* @__PURE__ */ React.createElement("div", { className: "space-y-1" }, STAFF_MODULE_KEYS.map((mk) => /* @__PURE__ */ React.createElement("div", { key: mk, className: "flex items-center justify-between text-sm py-1 px-2 rounded gap-2", style: { background: "#faf7ef" } }, /* @__PURE__ */ React.createElement("span", { style: { color: TEXT } }, MODULE_DEFS[mk].label), /* @__PURE__ */ React.createElement(
+  }, className: "text-xs rounded px-1.5 py-1 border", style: { borderColor: "#d8cfb8", color: sr.status === "Inactive" ? "#a3341f" : TEXT } }, ["Active", "Inactive"].map((st) => /* @__PURE__ */ React.createElement("option", { key: st }, st))), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => editStaffSectionRole(i), color: TEAL }, "Edit"), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => removeStaffSectionRole(i), color: "#a3341f" }, "Remove"))))), /* @__PURE__ */ React.createElement("div", { className: "text-xs pt-1", style: { color: MUTED } }, "Total monthly salary: ", /* @__PURE__ */ React.createElement("strong", { style: { color: TEAL } }, naira(staffSalaryTotal(form)))), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-5 gap-2" }, /* @__PURE__ */ React.createElement("select", { value: staffRoleDraft.section, onChange: (e) => setStaffRoleDraft({ ...staffRoleDraft, section: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }, SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s))), /* @__PURE__ */ React.createElement("select", { value: staffRoleDraft.role, onChange: (e) => {
+    setCustomRoleError("");
+    setStaffRoleDraft({ ...staffRoleDraft, role: e.target.value });
+  }, className: inputCls, style: { borderColor: "#d8cfb8" } }, ROLES.map((r) => /* @__PURE__ */ React.createElement("option", { key: r }, r))), staffRoleDraft.role === "Other" && /* @__PURE__ */ React.createElement("input", { placeholder: "Role name (e.g. Secretary, Nanny)", value: staffRoleDraft.customRole, onChange: (e) => {
+    setCustomRoleError("");
+    setStaffRoleDraft({ ...staffRoleDraft, customRole: e.target.value });
+  }, className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "Salary (\u20A6)", value: staffRoleDraft.salary, onChange: (e) => setStaffRoleDraft({ ...staffRoleDraft, salary: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { type: "date", value: staffRoleDraft.appointmentDate || "", onChange: (e) => setStaffRoleDraft({ ...staffRoleDraft, appointmentDate: e.target.value }), title: "Appointment date for this section", className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: addStaffSectionRole, style: { background: GOLD, color: INK }, className: "px-3 py-2 rounded-lg text-sm font-semibold" }, "+ Add")), customRoleError && /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "sans text-xs mt-1.5" }, customRoleError)), /* @__PURE__ */ React.createElement("div", { className: "mt-4" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs font-medium block mb-1.5" }, "Module access override \u2014 leave as Default to use the normal access for this person's role; Always allow / Always block overrides it just for them."), /* @__PURE__ */ React.createElement("div", { className: "space-y-1" }, STAFF_MODULE_KEYS.map((mk) => /* @__PURE__ */ React.createElement("div", { key: mk, className: "flex items-center justify-between text-sm py-1 px-2 rounded gap-2", style: { background: "#faf7ef" } }, /* @__PURE__ */ React.createElement("span", { style: { color: TEXT } }, MODULE_DEFS[mk].label), /* @__PURE__ */ React.createElement(
     "select",
     {
       value: (form.moduleAccess || {})[mk] === true ? "allow" : (form.moduleAccess || {})[mk] === false ? "block" : "default",
@@ -3086,7 +3178,7 @@ function FinanceModule({ session, tag }) {
     return { income, salaries, expenses, net: income - salaries - expenses };
   }, [fin]);
   if (!fin) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading finance\u2026", inline: true });
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["expenses", "Expenses"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, setFinLocal: setFin, students, session, classes }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "expenses" && !isCashier && /* @__PURE__ */ React.createElement(ExpensesTab, { fin, persist }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["expenses", "Expenses"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, setFinLocal: setFin, students, session, classes }), subtab === "familybill" && /* @__PURE__ */ React.createElement(FamilyBillTab, { fin, students }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "expenses" && !isCashier && /* @__PURE__ */ React.createElement(ExpensesTab, { fin, persist }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
 }
 const DEFAULT_FEE_ITEMS = [
   { category: "Western Section Tuition", label: "Babu", amount: 0 },
@@ -3702,6 +3794,44 @@ function DebtorSmsModal({ debtors, schoolName, onClose }) {
     }
   }
   return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(18,51,40,0.5)", zIndex: 50 }, className: "flex items-center justify-center p-4 overflow-y-auto" }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", border: `1.5px solid ${GOLD}`, maxHeight: "92vh", overflowY: "auto" }, className: "rounded-xl p-5 sans max-w-lg w-full" }, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-base font-semibold mb-2" }, "Send Balance Reminders (SMS)"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-xs mb-3" }, "Each guardian gets their own child's real balance. Siblings sharing one guardian number get a single combined message. This uses paid SMS credit."), /* @__PURE__ */ React.createElement("div", { className: "text-sm mb-3 px-3 py-2 rounded-lg", style: { background: "#e7f0ea", color: TEAL } }, recipients.length, " guardian number(s) will receive a reminder.", missingCount > 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "#a3341f" } }, missingCount, " debtor(s) have no guardian phone on file and will be skipped.")), /* @__PURE__ */ React.createElement("label", { className: "sans text-xs font-medium block mb-1", style: { color: MUTED } }, "Message template \u2014 use {name}, {balance}, {school}"), /* @__PURE__ */ React.createElement("textarea", { rows: 3, value: template, onChange: (e) => setTemplate(e.target.value), className: inputCls + " sans mb-2", style: { borderColor: "#d8cfb8" } }), sampleMessage && /* @__PURE__ */ React.createElement("div", { className: "text-xs mb-3 px-3 py-2 rounded-lg", style: { background: "#faf7ef", border: "1px solid #eee6d3", color: TEXT } }, /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "font-semibold mb-1" }, "Preview (first recipient):"), sampleMessage), result && /* @__PURE__ */ React.createElement(Banner, { kind: result.ok ? "ok" : "error" }, result.text), /* @__PURE__ */ React.createElement("div", { className: "flex gap-3 flex-wrap" }, confirming ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: send, disabled: busy, style: { background: "#a3341f", color: "#fff" }, className: "px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, busy ? "Sending\u2026" : `Confirm \u2014 send to ${recipients.length}`), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setConfirming(false), disabled: busy, style: { color: MUTED }, className: "text-sm" }, "Cancel")) : /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setConfirming(true), disabled: recipients.length === 0, style: { background: "#25D366", color: "#fff" }, className: "px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, "Review & Send"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onClose, style: { color: MUTED }, className: "text-sm" }, "Close"))));
+}
+function FamilyBillTab({ fin, students }) {
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [familyLabel, setFamilyLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const q = query.trim().toLowerCase();
+  const matches = q ? students.filter((s) => !selectedIds.includes(s.id) && (s.fullName.toLowerCase().includes(q) || (s.id || "").toLowerCase().includes(q) || (s.guardianPhone || "").includes(q))).slice(0, 8) : [];
+  function addStudent(id) {
+    setSelectedIds((prev) => [...prev, id]);
+    setQuery("");
+  }
+  function removeStudent(id) {
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
+  }
+  const summaries = useMemo(() => buildPayerSummaries(fin.transactions, students), [fin.transactions, students]);
+  const rows = selectedIds.map((id) => {
+    const s = students.find((x) => x.id === id);
+    const p = summaries.find((x) => x.studentId === id);
+    return { id, name: (s && s.fullName) || id, billed: p ? p.lifetimeBilled : 0, paid: p ? p.lifetimePaid : 0, balance: p ? p.balance : 0 };
+  });
+  const totals = rows.reduce((a, r) => ({ billed: a.billed + r.billed, paid: a.paid + r.paid, balance: a.balance + r.balance }), { billed: 0, paid: 0, balance: 0 });
+  async function handleShare() {
+    if (rows.length === 0) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const dataUrl = await generateFamilyBillImage(familyLabel.trim() || "Family", rows, totals);
+      const result = await shareOrDownloadImage(dataUrl, `family-bill-${(familyLabel.trim() || "family").replace(/\s+/g, "-").toLowerCase()}.png`);
+      if (result === "downloaded") setNote({ ok: true, text: "Image downloaded." });
+      else if (result === "shared") setNote({ ok: true, text: "Shared." });
+      else if (result === "failed") setNote({ ok: false, text: "Could not save the image \u2014 try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-3" }, "Pick the pupils to combine on one bill \u2014 siblings sharing a guardian will show a matching phone number. This pulls each pupil's current balance; it doesn't create a new record."), /* @__PURE__ */ React.createElement(Field, { label: "Family / household label (optional, appears on the bill)" }, /* @__PURE__ */ React.createElement("input", { value: familyLabel, onChange: (e) => setFamilyLabel(e.target.value), placeholder: "e.g. The Adamu Family", className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(Field, { label: "Add pupils" }, /* @__PURE__ */ React.createElement("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: "Search by name, admission no., or guardian phone\u2026", className: inputCls, style: { borderColor: "#d8cfb8" } })), matches.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mb-3 space-y-1" }, matches.map((s) => /* @__PURE__ */ React.createElement("button", { key: s.id, onClick: () => addStudent(s.id), className: "w-full text-left text-sm px-3 py-2 rounded-lg border", style: { borderColor: "#d8cfb8", color: TEXT } }, s.fullName, " \u2014 ", /* @__PURE__ */ React.createElement("span", { style: { color: MUTED } }, s.id, s.guardianPhone ? ` \xB7 ${s.guardianPhone}` : "")))), selectedIds.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No pupils added yet.") : /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-2" }, rows.map((r) => /* @__PURE__ */ React.createElement("span", { key: r.id, style: { background: "#faf7ef", border: "1px solid #d8cfb8" }, className: "text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5" }, r.name, /* @__PURE__ */ React.createElement("button", { onClick: () => removeStudent(r.id), style: { color: "#a3341f" }, className: "font-bold" }, "\xD7"))))), rows.length > 0 && /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(TableShell, { head: ["Pupil", "Billed", "Paid", "Balance"] }, rows.map((r, i) => /* @__PURE__ */ React.createElement("tr", { key: r.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, r.name), /* @__PURE__ */ React.createElement(Td, null, naira(r.billed)), /* @__PURE__ */ React.createElement(Td, null, naira(r.paid)), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("span", { style: { color: r.balance > 0 ? "#a3341f" : TEAL } }, naira(r.balance)))))), /* @__PURE__ */ React.createElement(SummaryRow, { label: "TOTAL BALANCE DUE", value: naira(totals.balance), bold: true, accent: totals.balance > 0 ? "#a3341f" : TEAL }), note && /* @__PURE__ */ React.createElement(Banner, { kind: note.ok ? "ok" : "error" }, note.text), /* @__PURE__ */ React.createElement("button", { onClick: handleShare, disabled: busy, style: { background: GOLD, color: INK }, className: "sans mt-3 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, busy ? "Preparing\u2026" : "Download / Share Family Bill (image)")));
 }
 function PayersTab({ fin, students, classes }) {
   const [filterTown, setFilterTown] = useState("All");
