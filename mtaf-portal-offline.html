@@ -3153,6 +3153,7 @@ const DEFAULT_FEE_CATALOG = {
     }
   ]
 };
+const FIN_FALLBACK = { catalog: DEFAULT_FEE_CATALOG, transactions: [], salaries: [], expenses: [], counters: {} };
 function FinanceModule({ session, tag }) {
   const [fin, setFin] = useState(null);
   const [students, setStudents] = useState([]);
@@ -3162,13 +3163,17 @@ function FinanceModule({ session, tag }) {
   const [settings, setSettings] = useState({ sectionPenalties: {}, schoolName: "Markazut Ta'aleem Alguzawee Foundation" });
   const isCashier = tag === "cashier";
   const [subtab, setSubtab] = useState(isCashier ? "bill" : "summary");
+  const finBaselineRef = useRef(null);
+  const [finConflict, setFinConflict] = useState(null);
   async function reloadStaff() {
     const r = await getJSON(K.records, { students: [], staff: [] });
     setStaff(r.staff || []);
   }
   useEffect(() => {
     (async () => {
-      setFin(await getJSON(K.fin, { catalog: DEFAULT_FEE_CATALOG, transactions: [], salaries: [], expenses: [], counters: {} }));
+      const loaded = await getJSON(K.fin, FIN_FALLBACK);
+      setFin(loaded);
+      finBaselineRef.current = JSON.stringify(loaded);
       const r = await getJSON(K.records, { students: [], staff: [] });
       setStudents(r.students || []);
       setStaff(r.staff || []);
@@ -3179,8 +3184,21 @@ function FinanceModule({ session, tag }) {
     })();
   }, []);
   async function persist(next) {
+    const fresh = await getJSON(K.fin, FIN_FALLBACK);
+    if (finBaselineRef.current !== null && JSON.stringify(fresh) !== finBaselineRef.current) {
+      setFinConflict(fresh);
+      return false;
+    }
     setFin(next);
+    finBaselineRef.current = JSON.stringify(next);
     await setJSON(K.fin, next);
+    return true;
+  }
+  async function reloadFinAfterConflict() {
+    const fresh = await getJSON(K.fin, FIN_FALLBACK);
+    setFin(fresh);
+    finBaselineRef.current = JSON.stringify(fresh);
+    setFinConflict(null);
   }
   const totals = useMemo(() => {
     if (!fin) return { income: 0, salaries: 0, expenses: 0, net: 0 };
@@ -3190,7 +3208,7 @@ function FinanceModule({ session, tag }) {
     return { income, salaries, expenses, net: income - salaries - expenses };
   }, [fin]);
   if (!fin) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading finance\u2026", inline: true });
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["expenses", "Expenses"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, setFinLocal: setFin, students, session, classes }), subtab === "familybill" && /* @__PURE__ */ React.createElement(FamilyBillTab, { fin, students }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "expenses" && !isCashier && /* @__PURE__ */ React.createElement(ExpensesTab, { fin, persist }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
+  return /* @__PURE__ */ React.createElement("div", null, finConflict && /* @__PURE__ */ React.createElement("div", { className: "mb-4 px-4 py-3 rounded-lg sans", style: { background: "#fdecea", border: "1.5px solid #a3341f" } }, /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-sm font-semibold mb-1" }, "Someone else just saved a change to Finance"), /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-xs mb-2" }, "Your last save was blocked so nothing gets overwritten. Reload to see the latest data, then redo your entry and save again."), /* @__PURE__ */ React.createElement("button", { onClick: reloadFinAfterConflict, style: { background: "#a3341f", color: "#fff" }, className: "px-3 py-1.5 rounded-lg text-xs font-semibold" }, "Reload latest Finance data")), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["expenses", "Expenses"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, setFinLocal: setFin, students, session, classes }), subtab === "familybill" && /* @__PURE__ */ React.createElement(FamilyBillTab, { fin, students }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "expenses" && !isCashier && /* @__PURE__ */ React.createElement(ExpensesTab, { fin, persist }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
 }
 const DEFAULT_FEE_ITEMS = [
   { category: "Western Section Tuition", label: "Babu", amount: 0 },
@@ -3556,12 +3574,12 @@ function LedgerTab({ fin, persist, students, classes }) {
     const transactions = fin.transactions.map(
       (tx) => tx.id === t.id ? { ...tx, tickedItems: editState.tickedItems, totalNewCharge: editTotalNewCharge, totalToBePaid, amountPaid: paidNum, currentBalance, collector: editState.collector.trim() || "Unrecorded", paymentMethod: editState.paymentDetails.type, paymentDetails: editState.paymentDetails } : tx
     );
-    await persist({ ...fin, transactions });
-    closeEdit();
+    const ok = await persist({ ...fin, transactions });
+    if (ok) closeEdit();
   }
   async function deleteTx(id) {
-    await persist({ ...fin, transactions: fin.transactions.filter((t) => t.id !== id) });
-    setConfirmDeleteId(null);
+    const ok = await persist({ ...fin, transactions: fin.transactions.filter((t) => t.id !== id) });
+    if (ok) setConfirmDeleteId(null);
   }
   function isMostRecentForStudent(t) {
     var _a;
@@ -4239,16 +4257,20 @@ function ExpensesTab({ fin, persist }) {
         createdAt: editingId ? expenses.find((e) => e.id === editingId).createdAt : (/* @__PURE__ */ new Date()).toISOString()
       };
       const others = expenses.filter((e) => e.id !== entry.id);
-      await persist({ ...fin, expenses: [entry, ...others] });
-      cancelEdit();
-      flash(editingId ? "Expense updated." : "Expense recorded.");
+      const ok = await persist({ ...fin, expenses: [entry, ...others] });
+      if (ok) {
+        cancelEdit();
+        flash(editingId ? "Expense updated." : "Expense recorded.");
+      } else {
+        flash("Not saved \u2014 someone else just updated Finance data. Reload using the banner above, then try again.");
+      }
     } finally {
       setBusy(false);
     }
   }
   async function deleteExpense(id) {
-    await persist({ ...fin, expenses: expenses.filter((e) => e.id !== id) });
-    if (editingId === id) cancelEdit();
+    const ok = await persist({ ...fin, expenses: expenses.filter((e) => e.id !== id) });
+    if (ok && editingId === id) cancelEdit();
   }
   const filtered = useMemo(() => {
     return expenses.filter((e) => {
@@ -4367,9 +4389,11 @@ function SalariesTab({ fin, persist, staff, att, settings, onStaffChanged }) {
     try {
       const finalEntry = computeGross(draft);
       const others = fin.salaries.filter((x) => !(x.staffId === finalEntry.staffId && x.month === finalEntry.month));
-      await persist({ ...fin, salaries: [finalEntry, ...others] });
-      setEditingId(null);
-      setDraft(null);
+      const ok = await persist({ ...fin, salaries: [finalEntry, ...others] });
+      if (ok) {
+        setEditingId(null);
+        setDraft(null);
+      }
     } finally {
       setBusy(false);
     }
