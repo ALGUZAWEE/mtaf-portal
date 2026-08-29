@@ -792,6 +792,16 @@ function withTimeout(promiseLike, ms) {
   });
 }
 const NETWORK_READ_TIMEOUT_MS = 15e3;
+const NETWORK_SAVE_TIMEOUT_MS = 25e3;
+async function invokeAction(action, body, ms) {
+  try {
+    const result = await withTimeout(sbClient.functions.invoke("clever-function", { body: { action, ...body } }), ms || NETWORK_SAVE_TIMEOUT_MS);
+    return result;
+  } catch (err) {
+    const timedOut = err && err.message === "MTAF: network request timed out";
+    return { data: null, error: { message: timedOut ? "This is taking too long \u2014 check your connection and try again. Nothing was saved yet, so it's safe to retry." : (err && err.message) || "Network error \u2014 check your connection and try again." } };
+  }
+}
 async function fetchJSONFromServer(key) {
   if (currentSchoolId) {
     // School/branch is known: read ONLY from the school-scoped table.
@@ -870,6 +880,16 @@ async function fetchJSONFromServer(key) {
   return void 0;
 }
 const backgroundRefreshInFlight = /* @__PURE__ */ new Set();
+function updateLocalCache(key, value) {
+  MEMORY_DB[key] = JSON.parse(JSON.stringify(value));
+  if (localCacheWorking) {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (err) {
+      localCacheWorking = false;
+    }
+  }
+}
 const lastBackgroundRefreshAt = {};
 const BACKGROUND_REFRESH_COOLDOWN_MS = 15e3;
 function refreshJSONInBackground(key) {
@@ -1116,9 +1136,9 @@ function drawCode39(ctx, rawText, x, y, width, height) {
   }
 }
 function normalizeAttEntry(v, defaultStatus) {
-  if (!v) return { status: defaultStatus || "Present", reason: "", reasonStatus: "", timeIn: "", source: "Manual" };
-  if (typeof v === "string") return { status: v, reason: "", reasonStatus: "", timeIn: "", source: "Manual" };
-  return { status: v.status || defaultStatus || "Present", reason: v.reason || "", reasonStatus: v.reasonStatus || "", timeIn: v.timeIn || "", source: v.source || "Manual" };
+  if (!v) return { status: defaultStatus || "Present", reason: "", reasonStatus: "", timeIn: "", timeOut: "", source: "Manual" };
+  if (typeof v === "string") return { status: v, reason: "", reasonStatus: "", timeIn: "", timeOut: "", source: "Manual" };
+  return { status: v.status || defaultStatus || "Present", reason: v.reason || "", reasonStatus: v.reasonStatus || "", timeIn: v.timeIn || "", timeOut: v.timeOut || "", source: v.source || "Manual" };
 }
 function ScanBox({ onSubmit, placeholder }) {
   const [value, setValue] = useState("");
@@ -2768,10 +2788,11 @@ const MODULE_DEFS = {
   scheme: { label: "Curriculum & Scheme", roles: ["admin", "owner", "teacher"] },
   taketest: { label: "CBT / Assessments", roles: ["student"] },
   mydashboard: { label: "Student Portal", roles: ["student"] },
-  mychildren: { label: "Parent Portal", roles: ["parent"] }
+  mychildren: { label: "Parent Portal", roles: ["parent"] },
+  mystaffportal: { label: "My Profile", roles: ["other"] }
 };
 const STAFF_MODULE_KEYS = Object.keys(MODULE_DEFS).filter((k) => !["taketest", "mydashboard", "mychildren"].includes(k));
-const MODULE_ICONS = { overview: "home", records_students: "users", records_staff: "users", classes: "grid", finance: "naira-sign", academics: "book-open", attendance: "check-square", library: "book", books: "package", inventory: "archive", communication: "message-circle", requests: "inbox", myrequests: "inbox", reports: "bar-chart-2", backup: "save", settings: "settings", cbt: "monitor", secret: "lock", scheme: "clipboard", taketest: "monitor", mydashboard: "award", mychildren: "heart" };
+const MODULE_ICONS = { overview: "home", records_students: "users", records_staff: "users", classes: "grid", finance: "naira-sign", academics: "book-open", attendance: "check-square", library: "book", books: "package", inventory: "archive", communication: "message-circle", requests: "inbox", myrequests: "inbox", reports: "bar-chart-2", backup: "save", settings: "settings", cbt: "monitor", secret: "lock", scheme: "clipboard", taketest: "monitor", mydashboard: "award", mychildren: "heart", mystaffportal: "users" };
 const ICON_PATHS = {
   home: [["path", { d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }], ["polyline", { points: "9 22 9 12 15 12 15 22" }]],
   users: [["path", { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" }], ["circle", { cx: 9, cy: 7, r: 4 }], ["path", { d: "M23 21v-2a4 4 0 0 0-3-3.87" }], ["path", { d: "M16 3.13a4 4 0 0 1 0 7.75" }]],
@@ -2902,7 +2923,8 @@ function Shell({ session, onLogout, onSessionUpdate }) {
     Communication: ["communication", "requests", "myrequests"],
     Administration: ["reports", "backup", "settings", "secret"],
     Family: ["mychildren"],
-    Student: ["mydashboard"]
+    Student: ["mydashboard"],
+    Staff: ["mystaffportal"]
   };
   const moduleCategoryFor = (key) => Object.entries(moduleCategories).find(([, keys]) => keys.includes(key))?.[0] || "Other";
   const filteredAllowed = allowed.filter(([key, d]) => {
@@ -2911,7 +2933,7 @@ function Shell({ session, onLogout, onSessionUpdate }) {
     const matchesCategory = moduleCategory === "All" || moduleCategoryFor(key) === moduleCategory;
     return matchesQuery && matchesCategory;
   });
-  const moduleSwitchContent = /* @__PURE__ */ React.createElement(React.Fragment, null, active === "overview" && /* @__PURE__ */ React.createElement(OverviewModule, { session }), active === "records_students" && /* @__PURE__ */ React.createElement(RecordsModule, { only: "students", tag }), active === "records_staff" && /* @__PURE__ */ React.createElement(RecordsModule, { only: "staff", tag }), active === "classes" && /* @__PURE__ */ React.createElement(ClassesModule, null), active === "finance" && /* @__PURE__ */ React.createElement(FinanceModule, { session, tag }), active === "academics" && /* @__PURE__ */ React.createElement(AcademicsModule, { canPromote: tag === "admin" || tag === "owner" }), active === "attendance" && /* @__PURE__ */ React.createElement(AttendanceModule, { canMarkPupils: tag === "admin" || tag === "owner" || tag === "teacher", canMarkStaff: tag === "admin" || tag === "owner" || tag === "security", actorName: session.fullName, canOverride: tag === "admin" || tag === "owner", tag, personId: session.personId }), active === "library" && /* @__PURE__ */ React.createElement(LibraryModule, null), active === "books" && /* @__PURE__ */ React.createElement(BookDistributionModule, null), active === "inventory" && /* @__PURE__ */ React.createElement(InventoryModule, { session }), active === "communication" && /* @__PURE__ */ React.createElement(CommunicationModule, { session }), active === "requests" && /* @__PURE__ */ React.createElement(RequestsModule, null), active === "myrequests" && /* @__PURE__ */ React.createElement(MyRequestsModule, { session }), active === "reports" && /* @__PURE__ */ React.createElement(ReportsModule, null), active === "backup" && /* @__PURE__ */ React.createElement(BackupModule, null), active === "settings" && /* @__PURE__ */ React.createElement(SettingsModule, null), active === "cbt" && /* @__PURE__ */ React.createElement(CBTModule, { session, tag }), active === "secret" && /* @__PURE__ */ React.createElement(SecretAreaModule, { session }), active === "scheme" && /* @__PURE__ */ React.createElement(SchemeOfWorkModule, { tag, session }), active === "taketest" && /* @__PURE__ */ React.createElement(TakeTestModule, { session }), active === "mydashboard" && /* @__PURE__ */ React.createElement(MyDashboardModule, { session }), active === "mychildren" && /* @__PURE__ */ React.createElement(ParentDashboardModule, { session, onSessionUpdate }));
+  const moduleSwitchContent = /* @__PURE__ */ React.createElement(React.Fragment, null, active === "overview" && /* @__PURE__ */ React.createElement(OverviewModule, { session }), active === "records_students" && /* @__PURE__ */ React.createElement(RecordsModule, { only: "students", tag }), active === "records_staff" && /* @__PURE__ */ React.createElement(RecordsModule, { only: "staff", tag }), active === "classes" && /* @__PURE__ */ React.createElement(ClassesModule, null), active === "finance" && /* @__PURE__ */ React.createElement(FinanceModule, { session, tag }), active === "academics" && /* @__PURE__ */ React.createElement(AcademicsModule, { canPromote: tag === "admin" || tag === "owner" }), active === "attendance" && /* @__PURE__ */ React.createElement(AttendanceModule, { canMarkPupils: tag === "admin" || tag === "owner" || tag === "teacher", canMarkStaff: tag === "admin" || tag === "owner" || tag === "security", actorName: session.fullName, canOverride: tag === "admin" || tag === "owner", tag, personId: session.personId }), active === "library" && /* @__PURE__ */ React.createElement(LibraryModule, null), active === "books" && /* @__PURE__ */ React.createElement(BookDistributionModule, null), active === "inventory" && /* @__PURE__ */ React.createElement(InventoryModule, { session }), active === "communication" && /* @__PURE__ */ React.createElement(CommunicationModule, { session }), active === "requests" && /* @__PURE__ */ React.createElement(RequestsModule, null), active === "myrequests" && /* @__PURE__ */ React.createElement(MyRequestsModule, { session }), active === "reports" && /* @__PURE__ */ React.createElement(ReportsModule, null), active === "backup" && /* @__PURE__ */ React.createElement(BackupModule, null), active === "settings" && /* @__PURE__ */ React.createElement(SettingsModule, null), active === "cbt" && /* @__PURE__ */ React.createElement(CBTModule, { session, tag }), active === "secret" && /* @__PURE__ */ React.createElement(SecretAreaModule, { session }), active === "scheme" && /* @__PURE__ */ React.createElement(SchemeOfWorkModule, { tag, session }), active === "taketest" && /* @__PURE__ */ React.createElement(TakeTestModule, { session }), active === "mydashboard" && /* @__PURE__ */ React.createElement(MyDashboardModule, { session }), active === "mychildren" && /* @__PURE__ */ React.createElement(ParentDashboardModule, { session, onSessionUpdate }), active === "mystaffportal" && /* @__PURE__ */ React.createElement(MyStaffPortalModule, { session }));
   return /* @__PURE__ */ React.createElement("div", { style: { background: CREAM, minHeight: "100vh", fontFamily: "'Fraunces', Georgia, serif" } }, /* @__PURE__ */ React.createElement(FontImport, null), /* @__PURE__ */ React.createElement("header", { style: { background: INK }, className: "px-5 py-4 sm:px-8" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ React.createElement(Crest, null), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { color: "#fff" }, className: "text-lg font-semibold leading-tight" }, "MTAF Portal"), /* @__PURE__ */ React.createElement("p", { style: { color: "#c9c2ac" }, className: "sans text-xs mt-0.5" }, session.fullName, " \xB7 ", tag === "student" ? "Pupil" : tag === "parent" ? "Parent / Guardian" : session.staffRole))), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement(BackupStatusBadge, null), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowChangePw(true), style: { background: "transparent", color: "#c9c2ac", border: "1px solid #3a5449" }, className: "sans px-4 py-1.5 rounded-full text-xs font-medium" }, "Change password"), /* @__PURE__ */ React.createElement("button", { onClick: onLogout, style: { background: TEAL, color: "#fff" }, className: "sans px-4 py-1.5 rounded-full text-xs font-medium" }, "Log out")))), showChangePw && /* @__PURE__ */ React.createElement(ChangePasswordModal, { session, onClose: () => setShowChangePw(false) }), /* @__PURE__ */ React.createElement("div", { className: "mtaf-layout max-w-6xl mx-auto" }, /* @__PURE__ */ React.createElement("nav", { className: "mtaf-sidebar", style: { width: 220, background: INK, padding: "1.25rem 0.75rem", flexShrink: 0 } }, sidebarItems), /* @__PURE__ */ React.createElement("div", { className: "mtaf-main mtaf-main-pad px-5 sm:px-8 py-5", style: { paddingBottom: "5.5rem" } }, moduleSwitchContent)), /* @__PURE__ */ React.createElement("nav", { className: "mtaf-bottomnav", style: { background: INK, borderTop: "1px solid #3a5449" } }, primaryKeys.map((key) => {
     const d = MODULE_DEFS[key];
     return /* @__PURE__ */ React.createElement("button", { key, onClick: () => requestActivate(key), style: { flex: 1, color: active === key ? GOLD : "#c9c2ac", background: "transparent" }, className: "sans flex flex-col items-center justify-center py-2 gap-0.5" }, /* @__PURE__ */ React.createElement(Icon, { name: MODULE_ICONS[key], size: 20 }), /* @__PURE__ */ React.createElement("span", { className: "text-xs" }, d.label));
@@ -3223,41 +3245,49 @@ function RecordsModule({ only, tag } = {}) {
     }
     setSaveError("");
     if (editingId) {
-      const { data: result, error } = await sbClient.functions.invoke("clever-function", { body: { action: "replace-person", personType: tab, id: editingId, record: form } });
+      const { data: result, error } = await invokeAction("replace-person", { personType: tab, id: editingId, record: form });
       if (error || !result || !result.ok) {
         setSaveError((result && result.error) || (error && error.message) || "Could not save \u2014 try again.");
         return;
       }
-      setData((prev) => ({ ...prev, [tab]: prev[tab].map((r) => r.id === editingId ? result.record : r) }));
+      const nextData = { ...data, [tab]: data[tab].map((r) => r.id === editingId ? result.record : r) };
+      setData(nextData);
+      updateLocalCache(K.records, nextData);
     } else {
-      const { data: result, error } = await sbClient.functions.invoke("clever-function", { body: { action: "add-person", personType: tab, record: form } });
+      const { data: result, error } = await invokeAction("add-person", { personType: tab, record: form });
       if (error || !result || !result.ok) {
         setSaveError((result && result.error) || (error && error.message) || "Could not save \u2014 try again.");
         return;
       }
-      setData((prev) => ({ ...prev, [tab]: [result.record, ...prev[tab]] }));
+      const nextData = { ...data, [tab]: [result.record, ...data[tab]] };
+      setData(nextData);
+      updateLocalCache(K.records, nextData);
       setMintedId(result.record.id);
     }
     setShowForm(false);
     setEditingId(null);
   }
   async function archive(id) {
-    const { data: result, error } = await sbClient.functions.invoke("clever-function", { body: { action: "patch-person", personType: tab, id, patch: { status: "Archived", archivedAt: (/* @__PURE__ */ new Date()).toISOString() } } });
+    const { data: result, error } = await invokeAction("patch-person", { personType: tab, id, patch: { status: "Archived", archivedAt: (/* @__PURE__ */ new Date()).toISOString() } });
     if (error || !result || !result.ok) {
       flashNote((result && result.error) || (error && error.message) || "Could not archive \u2014 try again.", "error");
       return;
     }
-    setData((prev) => ({ ...prev, [tab]: prev[tab].map((r) => r.id === id ? result.record : r) }));
+    const nextData = { ...data, [tab]: data[tab].map((r) => r.id === id ? result.record : r) };
+    setData(nextData);
+    updateLocalCache(K.records, nextData);
     setConfirmDeleteId(null);
     flashNote("Moved to Archived. You can restore it anytime from \u201CShow archived.\u201D", "ok");
   }
   async function restore(id) {
-    const { data: result, error } = await sbClient.functions.invoke("clever-function", { body: { action: "patch-person", personType: tab, id, patch: { status: "Active", archivedAt: null } } });
+    const { data: result, error } = await invokeAction("patch-person", { personType: tab, id, patch: { status: "Active", archivedAt: null } });
     if (error || !result || !result.ok) {
       flashNote((result && result.error) || (error && error.message) || "Could not restore \u2014 try again.", "error");
       return;
     }
-    setData((prev) => ({ ...prev, [tab]: prev[tab].map((r) => r.id === id ? result.record : r) }));
+    const nextData = { ...data, [tab]: data[tab].map((r) => r.id === id ? result.record : r) };
+    setData(nextData);
+    updateLocalCache(K.records, nextData);
     flashNote("Restored.", "ok");
   }
   function addEnrollment() {
@@ -3933,19 +3963,16 @@ function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
           addOn: addOnTicked ? { label: i.addOn.label, amount: i.addOn.amount, discountPct: addOnPct, finalAmount: discountedAmount(i.addOn.amount, addOnPct) } : null
         };
       });
-      const { data, error } = await sbClient.functions.invoke("clever-function", {
-        body: {
-          action: "record-payment",
-          studentId,
-          term,
-          session: sessionStr,
-          dueDate,
-          tickedItems,
-          totalNewCharge,
-          amountPaid: paidNum,
-          collector: collector.trim() || "Unrecorded",
-          paymentMethod: paymentDetails.type
-        }
+      const { data, error } = await invokeAction("record-payment", {
+        studentId,
+        term,
+        session: sessionStr,
+        dueDate,
+        tickedItems,
+        totalNewCharge,
+        amountPaid: paidNum,
+        collector: collector.trim() || "Unrecorded",
+        paymentMethod: paymentDetails.type
       });
       if (error || !data || !data.ok) {
         setSaveError((data && data.error) || (error && error.message) || "Could not record the payment \u2014 try again.");
@@ -3965,7 +3992,11 @@ function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
           setSaveError("Payment recorded, but the extra payment-type details couldn't be saved \u2014 you can re-add them by editing this payment.");
         }
       }
-      setFinLocal((prev) => ({ ...prev, transactions: [savedTx, ...prev.transactions] }));
+      setFinLocal((prev) => {
+        const next = { ...prev, transactions: [savedTx, ...prev.transactions] };
+        updateLocalCache(K.fin, next);
+        return next;
+      });
       setReceiptError(null);
       setLastReceipt(feeReceiptFromTx(savedTx, selectedStudent));
       setTicked({});
@@ -6041,13 +6072,17 @@ function InventoryModule({ session }) {
       dateAdded: stockDraft.dateAdded,
       note: stockDraft.note
     };
-    const { data, error } = await sbClient.functions.invoke("clever-function", { body: { action: "record-stock-batch", batch } });
+    const { data, error } = await invokeAction("record-stock-batch", { batch });
     if (error || !data || !data.ok) {
       setError((data && data.error) || (error && error.message) || "Could not save stock \u2014 try again.");
       return;
     }
     const savedBatch = data.batch;
-    setInv((prev) => ({ ...prev, stockBatches: [savedBatch, ...prev.stockBatches] }));
+    setInv((prev) => {
+      const next = { ...prev, stockBatches: [savedBatch, ...prev.stockBatches] };
+      updateLocalCache(K.inventory, next);
+      return next;
+    });
     setInfo(`Added ${batch.quantity} \xD7 ${batch.itemName}.`);
     setStockDraft({ ...stockDraft, itemName: "", quantity: "", pricePerUnit: "", note: "" });
   }
@@ -6151,7 +6186,7 @@ function InventoryModule({ session }) {
         paymentDetails: salePaymentDetails
       };
     });
-    const { data: saleResult, error: saleError } = await sbClient.functions.invoke("clever-function", { body: { action: "record-inventory-sale", items: outgoingItems } });
+    const { data: saleResult, error: saleError } = await invokeAction("record-inventory-sale", { items: outgoingItems });
     if (saleError || !saleResult || !saleResult.ok) {
       setError((saleResult && saleResult.error) || (saleError && saleError.message) || "Could not record the sale \u2014 try again.");
       return;
@@ -6159,7 +6194,11 @@ function InventoryModule({ session }) {
     const serverSales = saleResult.sales;
     const savedPaymentMissing = serverSales.length > 0 && !serverSales[0].paymentMethod;
     const newSales = savedPaymentMissing ? serverSales.map((s) => ({ ...s, paymentMethod: salePaymentDetails.type, paymentDetails: salePaymentDetails })) : serverSales;
-    setInv((prev) => ({ ...prev, sales: [...newSales, ...prev.sales] }));
+    setInv((prev) => {
+      const next = { ...prev, sales: [...newSales, ...prev.sales] };
+      updateLocalCache(K.inventory, next);
+      return next;
+    });
     if (savedPaymentMissing) {
       setError("Sale recorded, but this account's server function may not be saving payment-type details yet (they show below for this session, but might not survive a reload) \u2014 see the note under Record Sale.");
     }
@@ -7407,6 +7446,36 @@ function SchemeOfWorkModule({ tag, session }) {
     const isTopic = kind.startsWith("Topic");
     return /* @__PURE__ */ React.createElement(Card, { key: week }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2 mb-2" }, /* @__PURE__ */ React.createElement("span", { style: { background: isTopic ? TEAL : "#eee6d3", color: isTopic ? "#fff" : INK }, className: "text-xs font-semibold px-2 py-0.5 rounded-full sans" }, "Week ", week), /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs sans" }, kind)), isTopic ? /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 sans" }, /* @__PURE__ */ React.createElement("input", { placeholder: "Topic", value: w.topic || "", onChange: (e) => updateWeek(week, "topic", e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { placeholder: "Sub-topic / content", value: w.subtopic || "", onChange: (e) => updateWeek(week, "subtopic", e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("textarea", { placeholder: "Learning objectives", value: w.objectives || "", onChange: (e) => updateWeek(week, "objectives", e.target.value), rows: 2, className: inputCls + " sm:col-span-2", style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("textarea", { placeholder: "Activities", value: w.activities || "", onChange: (e) => updateWeek(week, "activities", e.target.value), rows: 2, className: inputCls + " sm:col-span-2", style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { placeholder: "Materials", value: w.materials || "", onChange: (e) => updateWeek(week, "materials", e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { placeholder: "Assessment", value: w.assessment || "", onChange: (e) => updateWeek(week, "assessment", e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { placeholder: "Homework (optional)", value: w.homework || "", onChange: (e) => updateWeek(week, "homework", e.target.value), className: inputCls + " sm:col-span-2", style: { borderColor: "#d8cfb8" } })) : /* @__PURE__ */ React.createElement("input", { placeholder: "Notes for this week (optional)", value: w.notes || "", onChange: (e) => updateWeek(week, "notes", e.target.value), className: inputCls + " sans", style: { borderColor: "#d8cfb8" } }));
   })));
+}
+function MyStaffPortalModule({ session }) {
+  const [me, setMe] = useState(null);
+  const [attRows, setAttRows] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    (async () => {
+      setLoadError("");
+      try {
+        const records = await getJSON(K.records, { students: [], staff: [], counters: {} });
+        const person = (records.staff || []).find((s) => s.id === session.personId);
+        setMe(person || null);
+        const att = await getJSON(K.att, { student: {}, staff: {} });
+        const rows = Object.entries(att.staff || {}).filter(([, dayMap]) => dayMap[session.personId]).map(([date, dayMap]) => ({ date, ...normalizeAttEntry(dayMap[session.personId]) })).sort((a, b) => b.date.localeCompare(a.date));
+        setAttRows(rows);
+      } catch (err) {
+        setLoadError("Could not reach the server \u2014 check your connection and try again.");
+      }
+    })();
+  }, [session]);
+  if (loadError) return /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, loadError);
+  if (me === null) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading your profile\u2026", inline: true });
+  const summary = attRows.reduce((acc, r) => {
+    if (r.status === "Present") acc.present++;
+    else if (r.status === "Absent") acc.absent++;
+    else if (r.status === "Late") acc.late++;
+    else if (r.status === "On Leave") acc.onLeave++;
+    return acc;
+  }, { present: 0, absent: 0, late: 0, onLeave: 0 });
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { style: { color: INK }, className: "font-serif text-base font-semibold" }, me.fullName), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "sans text-xs" }, me.id, " \xB7 ", me.staffRole || "Staff"), me.phone && /* @__PURE__ */ React.createElement("div", { style: { color: TEXT }, className: "sans text-sm mt-2" }, "\u{1F4DE} ", me.phone), (me.sectionRoles || []).length > 0 && /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-1.5 mt-2" }, me.sectionRoles.map((sr, i) => /* @__PURE__ */ React.createElement("span", { key: i, style: { background: "#e7f0ea", color: TEAL }, className: "text-xs px-2.5 py-1 rounded-full" }, sr.section, " \u2014 ", sr.role)))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "My attendance"), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Present", value: summary.present, accent: TEAL }), /* @__PURE__ */ React.createElement(StatCard, { label: "Late", value: summary.late, accent: GOLD }), /* @__PURE__ */ React.createElement(StatCard, { label: "Absent", value: summary.absent, accent: summary.absent > 0 ? "#a3341f" : TEXT }), /* @__PURE__ */ React.createElement(StatCard, { label: "On Leave", value: summary.onLeave })), attRows.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-sm" }, "No attendance recorded yet.") : /* @__PURE__ */ React.createElement(TableShell, { head: ["Date", "Status", "Time in", "Time out", "Reason"] }, attRows.slice(0, 30).map((r, i) => /* @__PURE__ */ React.createElement("tr", { key: r.date, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, r.date), /* @__PURE__ */ React.createElement(Td, { style: { color: r.status === "Present" ? TEAL : r.status === "Absent" ? "#a3341f" : r.status === "Late" ? GOLD : TEXT } }, r.status), /* @__PURE__ */ React.createElement(Td, null, r.timeIn || "\u2014"), /* @__PURE__ */ React.createElement(Td, null, r.timeOut || "\u2014"), /* @__PURE__ */ React.createElement(Td, null, r.reason || "\u2014"))))), /* @__PURE__ */ React.createElement(Banner, { kind: "ok" }, "To send a message or complaint to the school office, use \u201CMy Requests\u201D in the menu."));
 }
 function MyDashboardModule({ session }) {
   const [me, setMe] = useState(null);
