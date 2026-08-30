@@ -591,60 +591,39 @@ function loadCachedSchoolContext() {
     return null;
   }
 }
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-// ---- ensureShadowAuthSession: signs the browser into Supabase Auth
-// in the background right after a successful local login, so later
-// saves carry a valid identity token. Retries a few times with a
-// short backoff before giving up, since a single dropped request on
-// a weak connection used to leave the session silently unestablished
-// \u2014 every save after that would then be rejected by the server with
-// "Not authorized", surfacing to the user as a confusing generic
-// "Edge Function returned a non-2xx status code" message. ----
-async function ensureShadowAuthSession(username, password, legacyRole, attempts) {
+async function ensureShadowAuthSession(username, password, legacyRole) {
   if (!sbClient || !username || !password) return false;
   const email = emailForUsername(username);
   const roleMap = { Staff: "staff", Student: "student", Parent: "parent" };
   const dbRole = roleMap[legacyRole] || "staff";
-  const maxAttempts = attempts || 3;
-  let lastErr = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      let { data, error } = await sbClient.auth.signInWithPassword({ email, password });
-      if (error) {
-        const signUp = await sbClient.auth.signUp({ email, password });
-        if (signUp.error) throw signUp.error;
-        data = signUp.data;
-      }
-      const uid = data && data.user && data.user.id;
-      if (!uid) throw new Error("No user id returned from sign-in.");
-      currentAuthUserId = uid;
-      currentActorName = username;
-      const { data: prof } = await sbClient.from("profiles").select("id,school_id").eq("id", uid).maybeSingle();
-      if (prof && prof.school_id) {
-        currentSchoolId = prof.school_id;
-      } else {
-        const { data: sid } = await sbClient.rpc("the_school_id");
-        if (sid) {
-          await sbClient.from("profiles").insert({ id: uid, school_id: sid, role: dbRole, full_name: username });
-          currentSchoolId = sid;
-        }
-      }
-      shadowAuthReady = !!currentSchoolId;
-      if (shadowAuthReady) {
-        cacheSchoolContext(uid, currentSchoolId);
-        return true;
-      }
-      lastErr = new Error("Could not resolve school context.");
-    } catch (err) {
-      lastErr = err;
+  try {
+    let { data, error } = await sbClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      const signUp = await sbClient.auth.signUp({ email, password });
+      if (signUp.error) throw signUp.error;
+      data = signUp.data;
     }
-    if (attempt < maxAttempts) await delay(attempt * 800);
+    const uid = data && data.user && data.user.id;
+    if (!uid) return false;
+    currentAuthUserId = uid;
+    currentActorName = username;
+    const { data: prof } = await sbClient.from("profiles").select("id,school_id").eq("id", uid).maybeSingle();
+    if (prof && prof.school_id) {
+      currentSchoolId = prof.school_id;
+    } else {
+      const { data: sid } = await sbClient.rpc("the_school_id");
+      if (sid) {
+        await sbClient.from("profiles").insert({ id: uid, school_id: sid, role: dbRole, full_name: username });
+        currentSchoolId = sid;
+      }
+    }
+    shadowAuthReady = !!currentSchoolId;
+    if (shadowAuthReady) cacheSchoolContext(uid, currentSchoolId);
+    return shadowAuthReady;
+  } catch (err) {
+    console.warn("MTAF: background account sync skipped \u2014", err && err.message ? err.message : err);
+    return false;
   }
-  console.warn("MTAF: background account sync skipped after retries \u2014", lastErr && lastErr.message ? lastErr.message : lastErr);
-  shadowAuthReady = false;
-  return false;
 }
 async function logDbAudit(action, dataKey) {
   if (!sbClient || !currentSchoolId || !currentAuthUserId) return;
@@ -814,34 +793,20 @@ function withTimeout(promiseLike, ms) {
 }
 const NETWORK_READ_TIMEOUT_MS = 15e3;
 const NETWORK_SAVE_TIMEOUT_MS = 25e3;
-// ---- unwrapFunctionError: supabase-js replaces the server's real
-// error message with a generic "Edge Function returned a non-2xx
-// status code" whenever the function responds with a non-200 status
-// (e.g. our 403 "Not authorized" / 500 "Server error"). The actual
-// JSON body the function sent is still available on error.context
-// (a Response object) \u2014 this reads it back out so the user sees
-// what actually went wrong instead of the generic wrapper text. ----
-async function unwrapFunctionError(error) {
-  if (!error) return null;
-  try {
-    if (error.context && typeof error.context.json === "function") {
-      const body = await error.context.clone().json();
-      if (body && body.error) return body.error;
-    }
-  } catch (_e) {
-    // context wasn't readable JSON \u2014 fall through to the generic message
-  }
-  if (error.message === "Not authorized.") {
-    return "Your session needs refreshing \u2014 please log out and log back in, then try again. Nothing was saved.";
-  }
-  return error.message || "Could not save \u2014 try again.";
-}
 async function invokeAction(action, body, ms) {
   try {
     const result = await withTimeout(sbClient.functions.invoke("clever-function", { body: { action, ...body } }), ms || NETWORK_SAVE_TIMEOUT_MS);
-    if (result && result.error) {
-      const friendly = await unwrapFunctionError(result.error);
-      return { data: result.data, error: { ...result.error, message: friendly } };
+    if (result && result.error && !result.data) {
+      try {
+        const ctx = result.error.context;
+        if (ctx && typeof ctx.json === "function") {
+          const parsedBody = await ctx.clone().json();
+          if (parsedBody && parsedBody.error) {
+            return { data: null, error: { message: parsedBody.error } };
+          }
+        }
+      } catch (unwrapErr) {
+      }
     }
     return result;
   } catch (err) {
@@ -2448,6 +2413,32 @@ function App() {
     const reader = new FileReader();
     reader.onload = async () => {
       try {
+        const parsed = JSON.parse(reader.result);
+        let warningExtra = "";
+        try {
+          const liveRecords = await getJSON(K.records, { students: [], staff: [] });
+          const backupRecords = (parsed && parsed[K.records]) || { students: [], staff: [] };
+          const liveStudents = (liveRecords.students || []).length;
+          const backupStudents = (backupRecords.students || []).length;
+          const liveStaff = (liveRecords.staff || []).length;
+          const backupStaff = (backupRecords.staff || []).length;
+          if (backupStudents < liveStudents || backupStaff < liveStaff) {
+            warningExtra = `
+
+\u26A0\uFE0F This backup has FEWER records than what's currently live: ${backupStudents} pupils vs ${liveStudents} now, ${backupStaff} staff vs ${liveStaff} now. Loading it will erase the ${Math.max(0, liveStudents - backupStudents)} pupil(s) and ${Math.max(0, liveStaff - backupStaff)} staff added since this backup, and can cause NEW admission/service numbers to collide with ones already given out.`;
+          }
+        } catch (checkErr) {
+        }
+        const proceed = window.confirm(
+          `Loading this backup file will REPLACE all current pupils, staff, finance, and other records with whatever is in this file \u2014 including erasing anything added or changed since this backup was taken. This cannot be undone.${warningExtra}
+
+Only do this if you're sure the live data is wrong and this file is correct. Continue?`
+        );
+        if (!proceed) {
+          setImportBusy(false);
+          e.target.value = "";
+          return;
+        }
         await importAllData(reader.result);
         setSession(null);
         setReloadKey((k) => k + 1);
@@ -2476,6 +2467,10 @@ function App() {
         }
       `), /* @__PURE__ */ React.createElement("div", { id: "mtaf-print-area" }), /* @__PURE__ */ React.createElement("div", { style: { background: "#faf7ef", borderBottom: "1px solid #d8cfb8" }, className: "px-4 py-2 flex items-center justify-between gap-2 sans flex-wrap mtaf-offline" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, storageWorking ? 'Data is saved automatically as you go. Use "Save to file" now and then to keep an offline backup.' : hasPersistentStorage ? `Storage isn't responding right now \u2014 your changes are kept safely for this session, but won't survive a reload until it recovers. Use "Save to file" often.` : "Running in offline mode \u2014 data lives in this session only. Save often."), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("button", { onClick: handleSaveToFile, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-1.5 rounded-full" }, "Save to file"), /* @__PURE__ */ React.createElement("button", { onClick: handleImportClick, disabled: importBusy, style: { background: GOLD, color: INK }, className: "text-xs font-medium px-3 py-1.5 rounded-full disabled:opacity-50" }, importBusy ? "Loading\u2026" : "Load from file"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "application/json", onChange: handleFileChange, style: { display: "none" } }))), bannerMsg && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: bannerIsError ? "#fbe9e7" : "#e7f0ea", color: bannerIsError ? "#a3341f" : TEAL } }, bannerMsg), restoringSession ? /* @__PURE__ */ React.createElement("div", { className: "flex-1 flex items-center justify-center py-16 sans text-sm", style: { color: MUTED } }, "Reconnecting\u2026") : !session ? /* @__PURE__ */ React.createElement(AuthGate, { key: reloadKey, onLogin: setSession }) : /* @__PURE__ */ React.createElement(Shell, { key: reloadKey, session, onLogout: () => {
     clearRememberedSession();
+    try {
+      if (window.localStorage) window.localStorage.removeItem(SCHOOL_CACHE_KEY);
+    } catch (err) {
+    }
     currentAuthUserId = null;
     currentSchoolId = null;
     currentActorName = "";
@@ -3608,19 +3603,26 @@ function ClassesModule() {
   const [armDrafts, setArmDrafts] = useState({});
   const [confirmDeleteClassId, setConfirmDeleteClassId] = useState(null);
   const [loadInfo, setLoadInfo] = useState("");
+  const cmBaselineRef = useRef(null);
   useEffect(() => {
     (async () => {
       await ensureBaselineClasses();
       const c = await getJSON(K.cm, { sections: SECTIONS, classes: [] });
       setCm(c);
+      cmBaselineRef.current = c;
       setActiveSection(c.sections[0]);
       const r = await getJSON(K.records, { staff: [] });
       setStaff((r.staff || []).filter((s) => (s.sectionRoles || []).some((sr) => sr.role === "Teacher" || sr.role === "Head")));
     })();
   }, []);
   async function persist(next) {
-    setCm(next);
-    await setJSON(K.cm, next);
+    const fresh = await getJSON(K.cm, { sections: SECTIONS, classes: [] });
+    const baseline = cmBaselineRef.current || { sections: SECTIONS, classes: [] };
+    const merged = { sections: next.sections || fresh.sections, classes: mergeArrayById(fresh.classes, baseline.classes, next.classes) };
+    setCm(merged);
+    cmBaselineRef.current = merged;
+    await setJSON(K.cm, merged);
+    return merged;
   }
   async function loadDefaultClasses() {
     const classes = [...cm.classes];
@@ -5655,6 +5657,23 @@ function mergeAttBranch(freshBranch, baselineBranch, nextBranch) {
   });
   return merged;
 }
+function mergeArrayById(freshArr, baselineArr, nextArr) {
+  const fresh = freshArr || [];
+  const baseline = baselineArr || [];
+  const next = nextArr || [];
+  const baselineIds = new Set(baseline.map((x) => x.id));
+  const nextIds = new Set(next.map((x) => x.id));
+  const merged = fresh.filter((x) => !(baselineIds.has(x.id) && !nextIds.has(x.id)));
+  next.forEach((item) => {
+    const baseItem = baseline.find((b) => b.id === item.id);
+    const changed = !baseItem || JSON.stringify(baseItem) !== JSON.stringify(item);
+    if (!changed) return;
+    const idx = merged.findIndex((x) => x.id === item.id);
+    if (idx >= 0) merged[idx] = item;
+    else merged.unshift(item);
+  });
+  return merged;
+}
 function AttendanceModule({ canMarkPupils, canMarkStaff, actorName, canOverride, tag, personId }) {
   const [att, setAtt] = useState(null);
   const [students, setStudents] = useState([]);
@@ -6603,12 +6622,22 @@ function BookDistributionModule() {
 function LibraryModule() {
   const [lib, setLib] = useState(null);
   const [bookDraft, setBookDraft] = useState({ title: "", author: "", category: "", copiesTotal: "" });
+  const libBaselineRef = useRef(null);
   useEffect(() => {
-    (async () => setLib(await getJSON(K.lib, { books: [], loans: [] })))();
+    (async () => {
+      const loaded = await getJSON(K.lib, { books: [], loans: [] });
+      setLib(loaded);
+      libBaselineRef.current = loaded;
+    })();
   }, []);
   async function persist(next) {
-    setLib(next);
-    await setJSON(K.lib, next);
+    const fresh = await getJSON(K.lib, { books: [], loans: [] });
+    const baseline = libBaselineRef.current || { books: [], loans: [] };
+    const merged = { books: mergeArrayById(fresh.books, baseline.books, next.books), loans: mergeArrayById(fresh.loans, baseline.loans, next.loans) };
+    setLib(merged);
+    libBaselineRef.current = merged;
+    await setJSON(K.lib, merged);
+    return merged;
   }
   async function addBook() {
     if (!bookDraft.title.trim() || !bookDraft.copiesTotal) return;
@@ -7084,9 +7113,12 @@ function CBTModule({ session, tag }) {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [subtab, setSubtab] = useState("build");
+  const cbtBaselineRef = useRef(null);
   useEffect(() => {
     (async () => {
-      setCbt(await getJSON(K.cbt, { tests: [], attempts: [] }));
+      const loaded = await getJSON(K.cbt, { tests: [], attempts: [] });
+      setCbt(loaded);
+      cbtBaselineRef.current = loaded;
       const c = { classes: await ensureBaselineClasses() };
       const r = await getJSON(K.records, { students: [] });
       setStudents(r.students || []);
@@ -7099,8 +7131,13 @@ function CBTModule({ session, tag }) {
     })();
   }, [tag, session]);
   async function persist(next) {
-    setCbt(next);
-    await setJSON(K.cbt, next);
+    const fresh = await getJSON(K.cbt, { tests: [], attempts: [] });
+    const baseline = cbtBaselineRef.current || { tests: [], attempts: [] };
+    const merged = { tests: mergeArrayById(fresh.tests, baseline.tests, next.tests), attempts: mergeArrayById(fresh.attempts, baseline.attempts, next.attempts) };
+    setCbt(merged);
+    cbtBaselineRef.current = merged;
+    await setJSON(K.cbt, merged);
+    return merged;
   }
   if (!cbt) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading CBT\u2026", inline: true });
   return /* @__PURE__ */ React.createElement("div", null, tag === "teacher" && classes.length === 0 && /* @__PURE__ */ React.createElement(Banner, { kind: "error" }, "You're not assigned as class teacher for any arm yet \u2014 ask an admin to assign you in Classes before you can build a test."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, [["build", "Build Test"], ["results", "Results"]].map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "build" && /* @__PURE__ */ React.createElement(CBTBuildTest, { cbt, persist, classes, students }), subtab === "results" && /* @__PURE__ */ React.createElement(CBTResults, { cbt, persist }));
@@ -7293,16 +7330,24 @@ function TakeTestModule({ session }) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [submitted, setSubmitted] = useState(null);
   const timerRef = useRef(null);
+  const cbtBaselineRef = useRef(null);
   useEffect(() => {
     (async () => {
-      setCbt(await getJSON(K.cbt, { tests: [], attempts: [] }));
+      const loaded = await getJSON(K.cbt, { tests: [], attempts: [] });
+      setCbt(loaded);
+      cbtBaselineRef.current = loaded;
       const r = await getJSON(K.records, { students: [] });
       setStudent((r.students || []).find((s) => s.id === session.personId));
     })();
   }, [session]);
   async function persist(next) {
-    setCbt(next);
-    await setJSON(K.cbt, next);
+    const fresh = await getJSON(K.cbt, { tests: [], attempts: [] });
+    const baseline = cbtBaselineRef.current || { tests: [], attempts: [] };
+    const merged = { tests: mergeArrayById(fresh.tests, baseline.tests, next.tests), attempts: mergeArrayById(fresh.attempts, baseline.attempts, next.attempts) };
+    setCbt(merged);
+    cbtBaselineRef.current = merged;
+    await setJSON(K.cbt, merged);
+    return merged;
   }
   const availableTests = student && cbt ? cbt.tests.filter((t) => !t.closed && student.town === t.town && (student.enrollments || []).some((en) => en.className === t.className && en.arm === t.arm) && !cbt.attempts.find((a) => a.testId === t.id && a.studentId === student.id)) : [];
   function startTest(test) {
@@ -7453,9 +7498,12 @@ function SchemeOfWorkModule({ tag, session }) {
   const [selSubject, setSelSubject] = useState("");
   const [selTerm, setSelTerm] = useState(TERMS[0]);
   const [selSession, setSelSessionStr] = useState(currentSession());
+  const schemeBaselineRef = useRef(null);
   useEffect(() => {
     (async () => {
-      setScheme(await getJSON(K.scheme, { entries: {} }));
+      const loaded = await getJSON(K.scheme, { entries: {} });
+      setScheme(loaded);
+      schemeBaselineRef.current = loaded;
       const baseline = await ensureBaselineClasses();
       let western = baseline.filter((cl) => cl.section === "Western");
       if (tag === "teacher") {
@@ -7467,8 +7515,13 @@ function SchemeOfWorkModule({ tag, session }) {
     })();
   }, [tag, session]);
   async function persist(next) {
-    setScheme(next);
-    await setJSON(K.scheme, next);
+    const fresh = await getJSON(K.scheme, { entries: {} });
+    const baseline = schemeBaselineRef.current || { entries: {} };
+    const merged = { entries: mergeAttBranch(fresh.entries, baseline.entries, next.entries) };
+    setScheme(merged);
+    schemeBaselineRef.current = merged;
+    await setJSON(K.scheme, merged);
+    return merged;
   }
   const classesInTown = classes.filter((c) => c.town === selTown);
   const classObj = classes.find((c) => c.id === selClassId);
