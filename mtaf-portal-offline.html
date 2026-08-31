@@ -794,9 +794,13 @@ function withTimeout(promiseLike, ms) {
 const NETWORK_READ_TIMEOUT_MS = 15e3;
 const NETWORK_SAVE_TIMEOUT_MS = 25e3;
 async function invokeAction(action, body, ms) {
+  const NO_CONNECTION_MSG = "No connection right now \u2014 nothing was saved, so it's safe to try again once you have signal.";
   try {
     const result = await withTimeout(sbClient.functions.invoke("clever-function", { body: { action, ...body } }), ms || NETWORK_SAVE_TIMEOUT_MS);
     if (result && result.error && !result.data) {
+      if (result.error.name === "FunctionsFetchError" || /failed to send a request/i.test(result.error.message || "")) {
+        return { data: null, error: { message: NO_CONNECTION_MSG } };
+      }
       try {
         const ctx = result.error.context;
         if (ctx && typeof ctx.json === "function") {
@@ -811,7 +815,7 @@ async function invokeAction(action, body, ms) {
     return result;
   } catch (err) {
     const timedOut = err && err.message === "MTAF: network request timed out";
-    return { data: null, error: { message: timedOut ? "This is taking too long \u2014 check your connection and try again. Nothing was saved yet, so it's safe to retry." : (err && err.message) || "Network error \u2014 check your connection and try again." } };
+    return { data: null, error: { message: timedOut ? "This is taking too long \u2014 check your connection and try again. Nothing was saved yet, so it's safe to retry." : NO_CONNECTION_MSG } };
   }
 }
 async function fetchJSONFromServer(key) {
