@@ -516,6 +516,18 @@ async function sha256(text) {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 const randomSalt = () => Array.from(crypto.getRandomValues(new Uint8Array(8))).map((b) => b.toString(16).padStart(2, "0")).join("");
+function deriveLoginUsername(fullName, id, existingUsernames) {
+  const first = (String(fullName || "").split(" ")[0] || "user").toLowerCase().replace(/[^a-z]/g, "") || "user";
+  const tail = String(id || "").slice(-3).toLowerCase().replace(/[^a-z0-9]/g, "");
+  let candidate = first;
+  if (existingUsernames.has(candidate)) candidate = `${first}${tail}`;
+  let suf = 1;
+  while (existingUsernames.has(candidate)) {
+    candidate = `${first}${tail}${suf}`;
+    suf++;
+  }
+  return candidate;
+}
 const randomCode = () => String(Math.floor(1e5 + Math.random() * 9e5));
 const today = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
 const addDays = (d, n) => {
@@ -3845,7 +3857,7 @@ function FinanceModule({ session, tag }) {
     return { income, salaries, expenses, net: income - salaries - expenses };
   }, [fin]);
   if (!fin) return /* @__PURE__ */ React.createElement(CenterMessage, { text: "Loading finance\u2026", inline: true });
-  return /* @__PURE__ */ React.createElement("div", null, finConflict && /* @__PURE__ */ React.createElement("div", { className: "mb-4 px-4 py-3 rounded-lg sans", style: { background: "#fdecea", border: "1.5px solid #a3341f" } }, /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-sm font-semibold mb-1" }, "Someone else just saved a change to Finance"), /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-xs mb-2" }, "Your last save was blocked so nothing gets overwritten. Reload to see the latest data, then redo your entry and save again."), /* @__PURE__ */ React.createElement("button", { onClick: reloadFinAfterConflict, style: { background: "#a3341f", color: "#fff" }, className: "px-3 py-1.5 rounded-lg text-xs font-semibold" }, "Reload latest Finance data")), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["familybill", "Family Bill"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["expenses", "Expenses"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, setFinLocal: setFin, students, session, classes }), subtab === "familybill" && /* @__PURE__ */ React.createElement(FamilyBillTab, { fin, students }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "expenses" && !isCashier && /* @__PURE__ */ React.createElement(ExpensesTab, { fin, persist }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
+  return /* @__PURE__ */ React.createElement("div", null, finConflict && /* @__PURE__ */ React.createElement("div", { className: "mb-4 px-4 py-3 rounded-lg sans", style: { background: "#fdecea", border: "1.5px solid #a3341f" } }, /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-sm font-semibold mb-1" }, "Someone else just saved a change to Finance"), /* @__PURE__ */ React.createElement("p", { style: { color: "#a3341f" }, className: "text-xs mb-2" }, "Your last save was blocked so nothing gets overwritten. Reload to see the latest data, then redo your entry and save again."), /* @__PURE__ */ React.createElement("button", { onClick: reloadFinAfterConflict, style: { background: "#a3341f", color: "#fff" }, className: "px-3 py-1.5 rounded-lg text-xs font-semibold" }, "Reload latest Finance data")), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-5" }, (isCashier ? [["bill", "New Bill / Payment"], ["familybill", "Family Bill / Payment"], ["collection", "My Collections"], ["closing", "Cashier Closing"]] : [["summary", "Summary"], ["catalog", "Fee Catalog"], ["bill", "New Bill / Payment"], ["familybill", "Family Bill / Payment"], ["ledger", "Ledger"], ["debtors", "Debtors"], ["payers", "Payers"], ["scholarships", "Scholarships"], ["collection", "Daily Collection"], ["closing", "Cashier Closing"], ["expenses", "Expenses"], ["reports", "Financial Reports"], ["salaries", "Staff Salaries"]]).map(([k, l]) => /* @__PURE__ */ React.createElement(TabBtn, { key: k, active: subtab === k, onClick: () => setSubtab(k) }, l))), subtab === "summary" && !isCashier && /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ React.createElement(StatCard, { label: "Collected", value: naira(totals.income) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Salaries", value: naira(totals.salaries) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Expenses", value: naira(totals.expenses) }), /* @__PURE__ */ React.createElement(StatCard, { label: "Net", value: naira(totals.net), accent: totals.net >= 0 ? TEAL : "#a3341f" })), subtab === "catalog" && !isCashier && /* @__PURE__ */ React.createElement(FeeCatalogTab, { fin, persist, classes }), subtab === "bill" && /* @__PURE__ */ React.createElement(NewBillTab, { fin, persist, setFinLocal: setFin, students, session, classes }), subtab === "familybill" && /* @__PURE__ */ React.createElement(FamilyBillTab, { fin, students, classes, setFinLocal: setFin, session }), subtab === "ledger" && !isCashier && /* @__PURE__ */ React.createElement(LedgerTab, { fin, persist, students, classes }), subtab === "debtors" && !isCashier && /* @__PURE__ */ React.createElement(DebtorsTab, { fin, students, classes }), subtab === "payers" && !isCashier && /* @__PURE__ */ React.createElement(PayersTab, { fin, students, classes }), subtab === "scholarships" && !isCashier && /* @__PURE__ */ React.createElement(ScholarshipsTab, { students }), subtab === "collection" && /* @__PURE__ */ React.createElement(DailyCollectionTab, { fin, students, lockCollector: isCashier ? session.fullName : null }), subtab === "closing" && /* @__PURE__ */ React.createElement(ReconciliationTab, { fin, session, tag, students }), subtab === "expenses" && !isCashier && /* @__PURE__ */ React.createElement(ExpensesTab, { fin, persist }), subtab === "reports" && !isCashier && /* @__PURE__ */ React.createElement(FinancialReportsTab, { fin, students, classes }), subtab === "salaries" && !isCashier && /* @__PURE__ */ React.createElement(SalariesTab, { fin, persist, staff, att, settings, onStaffChanged: reloadStaff }));
 }
 const DEFAULT_FEE_ITEMS = [
   { category: "Western Section Tuition", label: "Babu", amount: 0 },
@@ -3939,6 +3951,17 @@ function FeeCatalogTab({ fin, persist, classes }) {
   const existingCategoryNames = fin.catalog.categories.map((c) => c.name);
   return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "Load your existing fee sheet"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-3" }, "Adds Western Tuition, Western Books, Additional Sections (with Muzakkira), Registration, and Other Fees \u2014 matching your current sheet exactly. Safe to tap more than once; it skips anything already in your catalog."), loadInfo && /* @__PURE__ */ React.createElement("p", { style: { color: TEAL }, className: "sans text-xs mb-2" }, loadInfo), /* @__PURE__ */ React.createElement("button", { onClick: loadDefaults, style: { background: TEAL, color: "#fff" }, className: "sans px-4 py-2 rounded-lg text-sm font-semibold" }, "Load MTAF Fee Items")), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-3" }, "Add a fee item"), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans mb-2" }, /* @__PURE__ */ React.createElement("input", { list: "fee-categories", placeholder: "Category (e.g. Additional Sections)", value: draft.category, onChange: (e) => setDraft({ ...draft, category: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("datalist", { id: "fee-categories" }, existingCategoryNames.map((n) => /* @__PURE__ */ React.createElement("option", { key: n, value: n }))), /* @__PURE__ */ React.createElement("input", { placeholder: "Item label (e.g. Islamiyyah Section)", value: draft.label, onChange: (e) => setDraft({ ...draft, label: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "Amount (\u20A6)", value: draft.amount, onChange: (e) => setDraft({ ...draft, amount: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 sans text-sm mb-2", style: { color: TEXT } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: draft.hasAddOn, onChange: (e) => setDraft({ ...draft, hasAddOn: e.target.checked }) }), "This item has an add-on (e.g. Muzakkira)"), draft.hasAddOn && /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 sans mb-2" }, /* @__PURE__ */ React.createElement("input", { placeholder: "Add-on label", value: draft.addOnLabel, onChange: (e) => setDraft({ ...draft, addOnLabel: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("input", { type: "number", placeholder: "Add-on amount (\u20A6)", value: draft.addOnAmount, onChange: (e) => setDraft({ ...draft, addOnAmount: e.target.value }), className: inputCls, style: { borderColor: "#d8cfb8" } })), allClassNames.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mb-2" }, /* @__PURE__ */ React.createElement("label", { className: "sans text-xs font-medium block mb-1", style: { color: MUTED } }, "Applies to these classes only (leave all unticked for \u201Capplies to everyone\u201D)"), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2" }, allClassNames.map((n) => /* @__PURE__ */ React.createElement("label", { key: n, className: "flex items-center gap-1 text-xs px-2 py-1 rounded-full", style: { background: (draft.classNames || []).includes(n) ? "#e7f0ea" : "#faf7ef", color: (draft.classNames || []).includes(n) ? TEAL : MUTED, border: "1px solid #eee6d3" } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: (draft.classNames || []).includes(n), onChange: () => toggleDraftClass(n), className: "sr-only" }), n)))), /* @__PURE__ */ React.createElement("button", { onClick: addItem, style: { background: GOLD, color: INK }, className: "sans px-4 py-2 rounded-lg text-sm font-semibold" }, "+ Add Item")), fin.catalog.categories.map((cat) => /* @__PURE__ */ React.createElement(Card, { key: cat.id }, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, cat.name), cat.items.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.id, className: "py-1.5", style: { borderTop: "1px solid #eee6d3" } }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center sans text-sm" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { color: TEXT } }, item.label), item.addOn && /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, " + ", item.addOn.label, " (", naira(item.addOn.amount), ")")), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ React.createElement("span", { style: { color: TEXT } }, naira(item.amount)), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => removeItem(cat.id, item.id), color: "#a3341f" }, "Remove"))), /* @__PURE__ */ React.createElement("div", { className: "text-xs mt-0.5", style: { color: MUTED } }, "Applies to: ", item.classNames && item.classNames.length > 0 ? item.classNames.join(", ") : "All classes", allClassNames.length > 0 && /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => setEditingClassesFor(editingClassesFor === item.id ? null : item.id), color: TEAL }, " \xB7 Edit")), editingClassesFor === item.id && /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mt-1.5" }, allClassNames.map((n) => /* @__PURE__ */ React.createElement("label", { key: n, className: "flex items-center gap-1 text-xs px-2 py-1 rounded-full", style: { background: (item.classNames || []).includes(n) ? "#e7f0ea" : "#faf7ef", color: (item.classNames || []).includes(n) ? TEAL : MUTED, border: "1px solid #eee6d3" } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: (item.classNames || []).includes(n), onChange: () => toggleItemClass(cat.id, item, n), className: "sr-only" }), n))))))), fin.catalog.categories.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No fee items yet \u2014 add your first one above."));
 }
+function PupilFinderBox({ studentId, setStudentId, selectedStudent, pupilQuery, setPupilQuery, pupilFilterTown, setPupilFilterTown, pupilFilterSection, setPupilFilterSection, pupilFilterClass, setPupilFilterClass, pupilFilterClassOptions, pupilMatches }) {
+  if (studentId && selectedStudent) {
+    const en = selectedStudent.enrollments && selectedStudent.enrollments[0];
+    return /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-2 px-3 py-2 rounded-lg sans", style: { background: "#faf7ef", border: "1px solid #d8cfb8" } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", { style: { color: INK }, className: "font-semibold text-sm" }, selectedStudent.fullName), /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs ml-2" }, selectedStudent.id, en ? ` \u00B7 ${en.section} - ${en.className}${en.arm ? " " + en.arm : ""}` : "", selectedStudent.town ? ` \u00B7 ${selectedStudent.town}` : "")), /* @__PURE__ */ React.createElement("button", { onClick: () => setStudentId(""), style: { color: TEAL }, className: "text-xs font-semibold underline shrink-0" }, "Change pupil"));
+  }
+  const showResults = pupilQuery.trim() || pupilFilterTown !== "All" || pupilFilterSection !== "All" || pupilFilterClass !== "All";
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans mb-2" }, /* @__PURE__ */ React.createElement("select", { value: pupilFilterTown, onChange: (e) => setPupilFilterTown(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", null, "All towns"), TOWNS.map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t))), /* @__PURE__ */ React.createElement("select", { value: pupilFilterSection, onChange: (e) => setPupilFilterSection(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", null, "All sections"), SECTIONS.map((s) => /* @__PURE__ */ React.createElement("option", { key: s }, s))), /* @__PURE__ */ React.createElement("select", { value: pupilFilterClass, onChange: (e) => setPupilFilterClass(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", null, "All classes"), pupilFilterClassOptions.map((c) => /* @__PURE__ */ React.createElement("option", { key: c }, c)))), /* @__PURE__ */ React.createElement("input", { value: pupilQuery, onChange: (e) => setPupilQuery(e.target.value), placeholder: "Search pupil by name or admission no.\u2026", className: inputCls + " sans mb-2", style: { borderColor: "#d8cfb8" } }), showResults && /* @__PURE__ */ React.createElement("div", { className: "space-y-1", style: { maxHeight: 220, overflowY: "auto" } }, pupilMatches.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs px-1" }, "No pupils match these filters."), pupilMatches.map((s) => {
+    const en = s.enrollments && s.enrollments[0];
+    return /* @__PURE__ */ React.createElement("button", { key: s.id, onClick: () => setStudentId(s.id), className: "w-full text-left text-sm px-3 py-2 rounded-lg border", style: { borderColor: "#d8cfb8", color: TEXT } }, s.fullName, " \u2014 ", /* @__PURE__ */ React.createElement("span", { style: { color: MUTED } }, s.id, en ? ` \u00B7 ${en.section} - ${en.className}${en.arm ? " " + en.arm : ""}` : "", s.town ? ` \u00B7 ${s.town}` : ""));
+  })));
+}
 function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
   const [studentId, setStudentId] = useState("");
   const [term, setTerm] = useState(TERMS[0]);
@@ -3952,12 +3975,32 @@ function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
   const [collector, setCollector] = useState((session == null ? void 0 : session.fullName) || "");
   const [paymentDetails, setPaymentDetails] = useState(emptyPaymentDetails());
   const [calendar, setCalendar] = useState(null);
+  const [pupilQuery, setPupilQuery] = useState("");
+  const [pupilFilterTown, setPupilFilterTown] = useState("All");
+  const [pupilFilterSection, setPupilFilterSection] = useState("All");
+  const [pupilFilterClass, setPupilFilterClass] = useState("All");
+  const [sessionReceipts, setSessionReceipts] = useState([]);
   useEffect(() => {
     (async () => setCalendar(await getJSON(K.termCalendar, { session: currentSession(), bySection: {} })))();
   }, []);
   const selectedStudent = useMemo(() => students.find((s) => s.id === studentId) || null, [students, studentId]);
   const selectedClassName = selectedStudent && selectedStudent.enrollments && selectedStudent.enrollments[0] && selectedStudent.enrollments[0].className;
   const scholarship = selectedStudent && selectedStudent.scholarship && selectedStudent.scholarship.active ? selectedStudent.scholarship : null;
+  const pupilFilterClassOptions = useMemo(() => {
+    const matching = classes.filter((c) => (pupilFilterTown === "All" || c.town === pupilFilterTown) && (pupilFilterSection === "All" || c.section === pupilFilterSection));
+    return [...new Set(matching.map((c) => c.name))];
+  }, [classes, pupilFilterTown, pupilFilterSection]);
+  const pupilMatches = useMemo(() => {
+    const q = pupilQuery.trim().toLowerCase();
+    return students.filter((s) => {
+      if (pupilFilterTown !== "All" && s.town !== pupilFilterTown) return false;
+      const enrolls = s.enrollments || [];
+      if (pupilFilterSection !== "All" && !enrolls.some((en) => en.section === pupilFilterSection)) return false;
+      if (pupilFilterClass !== "All" && !enrolls.some((en) => en.className === pupilFilterClass)) return false;
+      if (q && !(s.fullName.toLowerCase().includes(q) || (s.id || "").toLowerCase().includes(q))) return false;
+      return true;
+    }).slice(0, 30);
+  }, [students, pupilQuery, pupilFilterTown, pupilFilterSection, pupilFilterClass]);
   useEffect(() => {
     if (!calendar || !studentId) return;
     const stu = students.find((s) => s.id === studentId);
@@ -4051,20 +4094,24 @@ function NewBillTab({ fin, persist, setFinLocal, students, session, classes }) {
         return next;
       });
       setReceiptError(null);
-      setLastReceipt(feeReceiptFromTx(savedTx, selectedStudent));
+      const receipt = feeReceiptFromTx(savedTx, selectedStudent);
+      setLastReceipt(receipt);
+      setSessionReceipts((prev) => [{ id: savedTx.id, studentName: selectedStudent.fullName, studentId, receiptNo: receipt.receiptNo, amountPaid: paidNum }, ...prev]);
       setTicked({});
       setTickedAddOns({});
       setDiscounts({});
       setAddOnDiscounts({});
       setAmountPaid("");
       setPaymentDetails(emptyPaymentDetails());
+      setStudentId("");
+      setPupilQuery("");
     } catch (err) {
       setSaveError(err && err.message ? err.message : "Could not record the payment \u2014 try again.");
     } finally {
       setSaveBusy(false);
     }
   }
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans" }, /* @__PURE__ */ React.createElement("select", { value: studentId, onChange: (e) => setStudentId(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, /* @__PURE__ */ React.createElement("option", { value: "" }, "\u2014 pupil \u2014"), students.map((s) => /* @__PURE__ */ React.createElement("option", { key: s.id, value: s.id }, s.fullName))), /* @__PURE__ */ React.createElement("select", { value: term, onChange: (e) => setTerm(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, TERMS.map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t))), /* @__PURE__ */ React.createElement("input", { value: sessionStr, onChange: (e) => setSessionStr(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans mt-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Date to be paid (due date)"), /* @__PURE__ */ React.createElement("input", { type: "date", value: dueDate, onChange: (e) => setDueDate(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), /* @__PURE__ */ React.createElement("input", { value: collector, onChange: (e) => setCollector(e.target.value), placeholder: "Name of collector", className: inputCls, style: { borderColor: "#d8cfb8" } })))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(PaymentTypeFields, { value: paymentDetails, onChange: setPaymentDetails })), studentId && /* @__PURE__ */ React.createElement(React.Fragment, null, scholarship && /* @__PURE__ */ React.createElement(Banner, { kind: "ok" }, "\u{1F393} ", selectedStudent.fullName, " has an active scholarship \u2014 ", scholarship.percent, "% off is applied automatically to new charges below.", scholarship.reason ? ` (${scholarship.reason})` : ""), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-3" }, "Payment for (tick what applies)"), fin.catalog.categories.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No fee items in the catalog yet \u2014 add some in Fee Catalog first."), fin.catalog.categories.map((cat) => /* @__PURE__ */ React.createElement("div", { key: cat.id, className: "mb-3" }, /* @__PURE__ */ React.createElement("div", { style: { color: GOLD }, className: "sans text-xs font-semibold uppercase tracking-wide mb-1" }, cat.name), cat.items.filter((item) => !item.classNames || item.classNames.length === 0 || !selectedClassName || item.classNames.includes(selectedClassName)).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.id }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center py-1.5 sans text-sm gap-2", style: { color: TEXT } }, /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 flex-1 min-w-0" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !!ticked[item.id], onChange: (e) => setTicked({ ...ticked, [item.id]: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", { className: "truncate" }, item.label)), /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(PupilFinderBox, { studentId, setStudentId, selectedStudent, pupilQuery, setPupilQuery, pupilFilterTown, setPupilFilterTown, pupilFilterSection, setPupilFilterSection, pupilFilterClass, setPupilFilterClass, pupilFilterClassOptions, pupilMatches }), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 sans mt-2" }, /* @__PURE__ */ React.createElement("select", { value: term, onChange: (e) => setTerm(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }, TERMS.map((t) => /* @__PURE__ */ React.createElement("option", { key: t }, t))), /* @__PURE__ */ React.createElement("input", { value: sessionStr, onChange: (e) => setSessionStr(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-3 gap-2 sans mt-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Date to be paid (due date)"), /* @__PURE__ */ React.createElement("input", { type: "date", value: dueDate, onChange: (e) => setDueDate(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), /* @__PURE__ */ React.createElement("input", { value: collector, onChange: (e) => setCollector(e.target.value), placeholder: "Name of collector", className: inputCls, style: { borderColor: "#d8cfb8" } })))), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(PaymentTypeFields, { value: paymentDetails, onChange: setPaymentDetails })), sessionReceipts.length > 0 && /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "Payments recorded this visit (", sessionReceipts.length, ")"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-2" }, "A parent paying for more than one pupil? Just pick the next pupil above \u2014 each payment is saved and receipted separately."), /* @__PURE__ */ React.createElement(TableShell, { head: ["Pupil", "Receipt", "Paid"] }, sessionReceipts.map((r, i) => /* @__PURE__ */ React.createElement("tr", { key: r.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, r.studentName), /* @__PURE__ */ React.createElement(Td, { mono: true }, r.receiptNo), /* @__PURE__ */ React.createElement(Td, null, naira(r.amountPaid)))))), studentId && /* @__PURE__ */ React.createElement(React.Fragment, null, scholarship && /* @__PURE__ */ React.createElement(Banner, { kind: "ok" }, "\u{1F393} ", selectedStudent.fullName, " has an active scholarship \u2014 ", scholarship.percent, "% off is applied automatically to new charges below.", scholarship.reason ? ` (${scholarship.reason})` : ""), /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-3" }, "Payment for (tick what applies)"), fin.catalog.categories.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No fee items in the catalog yet \u2014 add some in Fee Catalog first."), fin.catalog.categories.map((cat) => /* @__PURE__ */ React.createElement("div", { key: cat.id, className: "mb-3" }, /* @__PURE__ */ React.createElement("div", { style: { color: GOLD }, className: "sans text-xs font-semibold uppercase tracking-wide mb-1" }, cat.name), cat.items.filter((item) => !item.classNames || item.classNames.length === 0 || !selectedClassName || item.classNames.includes(selectedClassName)).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.id }, /* @__PURE__ */ React.createElement("div", { className: "flex justify-between items-center py-1.5 sans text-sm gap-2", style: { color: TEXT } }, /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 flex-1 min-w-0" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !!ticked[item.id], onChange: (e) => setTicked({ ...ticked, [item.id]: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", { className: "truncate" }, item.label)), /* @__PURE__ */ React.createElement(
     "input",
     {
       type: "number",
@@ -4483,43 +4530,169 @@ function DebtorSmsModal({ debtors, schoolName, onClose }) {
   }
   return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(18,51,40,0.5)", zIndex: 50 }, className: "flex items-center justify-center p-4 overflow-y-auto" }, /* @__PURE__ */ React.createElement("div", { style: { background: "#fff", border: `1.5px solid ${GOLD}`, maxHeight: "92vh", overflowY: "auto" }, className: "rounded-xl p-5 sans max-w-lg w-full" }, /* @__PURE__ */ React.createElement("h3", { style: { color: INK }, className: "font-serif text-base font-semibold mb-2" }, "Send Balance Reminders (SMS)"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-xs mb-3" }, "Each guardian gets their own child's real balance. Siblings sharing one guardian number get a single combined message. This uses paid SMS credit."), /* @__PURE__ */ React.createElement("div", { className: "text-sm mb-3 px-3 py-2 rounded-lg", style: { background: "#e7f0ea", color: TEAL } }, recipients.length, " guardian number(s) will receive a reminder.", missingCount > 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "#a3341f" } }, missingCount, " debtor(s) have no guardian phone on file and will be skipped.")), /* @__PURE__ */ React.createElement("label", { className: "sans text-xs font-medium block mb-1", style: { color: MUTED } }, "Message template \u2014 use {name}, {balance}, {school}"), /* @__PURE__ */ React.createElement("textarea", { rows: 3, value: template, onChange: (e) => setTemplate(e.target.value), className: inputCls + " sans mb-2", style: { borderColor: "#d8cfb8" } }), sampleMessage && /* @__PURE__ */ React.createElement("div", { className: "text-xs mb-3 px-3 py-2 rounded-lg", style: { background: "#faf7ef", border: "1px solid #eee6d3", color: TEXT } }, /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "font-semibold mb-1" }, "Preview (first recipient):"), sampleMessage), result && /* @__PURE__ */ React.createElement(Banner, { kind: result.ok ? "ok" : "error" }, result.text), /* @__PURE__ */ React.createElement("div", { className: "flex gap-3 flex-wrap" }, confirming ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: send, disabled: busy, style: { background: "#a3341f", color: "#fff" }, className: "px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, busy ? "Sending\u2026" : `Confirm \u2014 send to ${recipients.length}`), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setConfirming(false), disabled: busy, style: { color: MUTED }, className: "text-sm" }, "Cancel")) : /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setConfirming(true), disabled: recipients.length === 0, style: { background: "#25D366", color: "#fff" }, className: "px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, "Review & Send"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onClose, style: { color: MUTED }, className: "text-sm" }, "Close"))));
 }
-function FamilyBillTab({ fin, students }) {
+function FamilyChildCard({ c, updateChildState, includeIds, setIncludeIds, discountedAmount }) {
+  const s = c.student;
+  if (!s) return null;
+  const cs = c.cs;
+  return /* @__PURE__ */ React.createElement(Card, { key: c.id }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-2 mb-2" }, /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 sans" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: c.included, onChange: (e) => setIncludeIds((prev) => ({ ...prev, [c.id]: e.target.checked })) }), /* @__PURE__ */ React.createElement("span", { style: { color: INK }, className: "font-serif text-sm font-semibold" }, s.fullName), /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, s.id, c.className ? ` \u00B7 ${c.className}` : "")), !c.included && /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, "Excluded from this payment")), c.included && /* @__PURE__ */ React.createElement(React.Fragment, null, c.scholarship && /* @__PURE__ */ React.createElement(Banner, { kind: "ok" }, "\u{1F393} ", c.scholarship.percent, "% scholarship applied automatically."), c.allItems.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-2" }, "No fee items in the catalog for this pupil's class.") : /* @__PURE__ */ React.createElement("div", { className: "mb-2" }, c.allItems.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.id, className: "flex justify-between items-center py-1 sans text-sm gap-2", style: { color: TEXT } }, /* @__PURE__ */ React.createElement("label", { className: "flex items-center gap-2 flex-1 min-w-0" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !!cs.ticked[item.id], onChange: (e) => updateChildState(c.id, { ticked: { ...cs.ticked, [item.id]: e.target.checked } }) }), /* @__PURE__ */ React.createElement("span", { className: "truncate" }, item.label)), /* @__PURE__ */ React.createElement("span", { style: { width: 76, textAlign: "right" } }, naira(discountedAmount(item.amount, cs.discounts[item.id])))))), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Last balance", value: naira(c.lastBalance) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "New charges (ticked)", value: naira(c.totalNewCharge) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Total to be paid", value: naira(c.totalToBePaid), bold: true }), /* @__PURE__ */ React.createElement("div", { className: "mt-2 mb-1" }, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "sans text-xs font-medium block mb-1" }, "This pupil's amount (editable)"), /* @__PURE__ */ React.createElement("input", { type: "number", value: cs.amountPaid, onChange: (e) => updateChildState(c.id, { amountPaid: e.target.value }), className: inputCls + " sans max-w-xs", style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(SummaryRow, { label: "Balance after", value: naira(c.currentBalance), accent: c.currentBalance > 0 ? "#a3341f" : TEAL })));
+}
+function FamilyBillTab({ fin, students, classes, setFinLocal, session }) {
+  const [phoneQuery, setPhoneQuery] = useState("");
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
+  const [includeIds, setIncludeIds] = useState({});
+  const [childState, setChildState] = useState({});
   const [familyLabel, setFamilyLabel] = useState("");
+  const [collector, setCollector] = useState((session && session.fullName) || "");
+  const [paymentDetails, setPaymentDetails] = useState(emptyPaymentDetails());
+  const [totalReceived, setTotalReceived] = useState("");
   const [busy, setBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [saveResults, setSaveResults] = useState([]);
   const q = query.trim().toLowerCase();
   const matches = q ? students.filter((s) => !selectedIds.includes(s.id) && (s.fullName.toLowerCase().includes(q) || (s.id || "").toLowerCase().includes(q) || (s.guardianPhone || "").includes(q))).slice(0, 8) : [];
   function addStudent(id) {
-    setSelectedIds((prev) => [...prev, id]);
+    setSelectedIds((prev) => prev.includes(id) ? prev : [...prev, id]);
+    setIncludeIds((prev) => prev[id] === void 0 ? { ...prev, [id]: true } : prev);
     setQuery("");
   }
   function removeStudent(id) {
     setSelectedIds((prev) => prev.filter((x) => x !== id));
   }
-  const summaries = useMemo(() => buildPayerSummaries(fin.transactions, students), [fin.transactions, students]);
-  const rows = selectedIds.map((id) => {
+  function findByPhone() {
+    const digits = normalizePhone(phoneQuery);
+    if (!digits) {
+      setNote({ ok: false, text: "Enter a guardian phone number to search." });
+      return;
+    }
+    const found = students.filter((s) => normalizePhone(s.guardianPhone) === digits);
+    if (found.length === 0) {
+      setNote({ ok: false, text: "No pupils found with that guardian phone number." });
+      return;
+    }
+    setNote(null);
+    found.forEach((s) => addStudent(s.id));
+  }
+  function discountedAmount(amount, pct) {
+    const p = Math.min(100, Math.max(0, Number(pct) || 0));
+    return Math.round(amount * (1 - p / 100));
+  }
+  function getChildState(id) {
+    return childState[id] || { ticked: {}, tickedAddOns: {}, discounts: {}, addOnDiscounts: {}, amountPaid: "" };
+  }
+  function updateChildState(id, patch) {
+    setChildState((prev) => ({ ...prev, [id]: { ...getChildState(id), ...patch } }));
+  }
+  const children = useMemo(() => selectedIds.map((id) => {
     const s = students.find((x) => x.id === id);
-    const p = summaries.find((x) => x.studentId === id);
-    return { id, name: (s && s.fullName) || id, billed: p ? p.lifetimeBilled : 0, paid: p ? p.lifetimePaid : 0, balance: p ? p.balance : 0 };
-  });
-  const totals = rows.reduce((a, r) => ({ billed: a.billed + r.billed, paid: a.paid + r.paid, balance: a.balance + r.balance }), { billed: 0, paid: 0, balance: 0 });
-  async function handleShare() {
-    if (rows.length === 0) return;
+    const cs = getChildState(id);
+    const className = s && s.enrollments && s.enrollments[0] && s.enrollments[0].className;
+    const scholarship = s && s.scholarship && s.scholarship.active ? s.scholarship : null;
+    const allItems = [];
+    fin.catalog.categories.forEach((cat) => cat.items.forEach((item) => {
+      if (item.classNames && item.classNames.length > 0 && className && !item.classNames.includes(className)) return;
+      allItems.push({ ...item, categoryName: cat.name });
+    }));
+    const beforeScholarship = allItems.reduce((sum, item) => sum + (cs.ticked[item.id] ? discountedAmount(item.amount, cs.discounts[item.id]) : 0), 0);
+    const totalNewCharge = scholarship ? discountedAmount(beforeScholarship, scholarship.percent) : beforeScholarship;
+    const history = fin.transactions.filter((t) => t.studentId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const lastBalance = history.length ? history[0].currentBalance : 0;
+    const totalToBePaid = lastBalance + totalNewCharge;
+    const amountPaid = Number(cs.amountPaid) || 0;
+    const currentBalance = totalToBePaid - amountPaid;
+    return { id, student: s, className, scholarship, allItems, cs, totalNewCharge, lastBalance, totalToBePaid, amountPaid, currentBalance, included: includeIds[id] !== false };
+  }), [selectedIds, students, childState, includeIds, fin]);
+  const includedChildren = children.filter((c) => c.included);
+  const combinedTotalDue = includedChildren.reduce((a, c) => a + c.totalToBePaid, 0);
+  const combinedAmountPaid = includedChildren.reduce((a, c) => a + c.amountPaid, 0);
+  const combinedBalance = combinedTotalDue - combinedAmountPaid;
+  function autoFillSplit() {
+    let remaining = Number(totalReceived) || 0;
+    includedChildren.forEach((c) => {
+      const pay = Math.max(0, Math.min(remaining, c.totalToBePaid));
+      remaining -= pay;
+      updateChildState(c.id, { amountPaid: pay ? String(pay) : "" });
+    });
+  }
+  async function saveFamilyPayment() {
+    const toSave = includedChildren.filter((c) => c.amountPaid > 0 || c.totalNewCharge > 0);
+    if (toSave.length === 0) {
+      setNote({ ok: false, text: "Nothing to save \u2014 tick fee items or enter an amount for at least one pupil." });
+      return;
+    }
     setBusy(true);
     setNote(null);
+    const results = [];
     try {
+      for (const c of toSave) {
+        const tickedItems = c.allItems.filter((i) => c.cs.ticked[i.id]).map((i) => {
+          const pct = Math.min(100, Math.max(0, Number(c.cs.discounts[i.id]) || 0));
+          const finalAmount = discountedAmount(i.amount, pct);
+          return { label: i.label, amount: i.amount, discountPct: pct, finalAmount, addOn: null };
+        });
+        const { data, error } = await invokeAction("record-payment", {
+          studentId: c.id,
+          term: TERMS[0],
+          session: currentSession(),
+          dueDate: today(),
+          tickedItems,
+          totalNewCharge: c.totalNewCharge,
+          amountPaid: c.amountPaid,
+          collector: collector.trim() || "Unrecorded",
+          paymentMethod: paymentDetails.type
+        });
+        if (error || !data || !data.ok) {
+          results.push({ id: c.id, name: c.student.fullName, ok: false, error: (data && data.error) || (error && error.message) || "Could not save" });
+          continue;
+        }
+        let savedTx = data.transaction;
+        const hasExtraDetails = Object.keys(paymentDetails).some((k) => k !== "type" && paymentDetails[k]);
+        if (hasExtraDetails) {
+          const { data: detailData, error: detailErr } = await sbClient.functions.invoke("clever-function", { body: { action: "attach-payment-details", transactionId: savedTx.id, paymentDetails } });
+          if (!detailErr && detailData && detailData.ok) savedTx = { ...savedTx, paymentDetails };
+        }
+        setFinLocal((prev) => {
+          const next = { ...prev, transactions: [savedTx, ...prev.transactions] };
+          updateLocalCache(K.fin, next);
+          return next;
+        });
+        results.push({ id: c.id, name: c.student.fullName, ok: true, receipt: feeReceiptFromTx(savedTx, c.student) });
+      }
+      setSaveResults(results);
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        setNote({ ok: true, text: `Saved ${results.length} payment${results.length === 1 ? "" : "s"}.` });
+        setChildState({});
+        setTotalReceived("");
+      } else {
+        setNote({ ok: false, text: `${results.length - failed.length} saved, ${failed.length} failed \u2014 see below.` });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function handleShare() {
+    if (children.length === 0) return;
+    setShareBusy(true);
+    setNote(null);
+    try {
+      const summaries = buildPayerSummaries(fin.transactions, students);
+      const rows = children.map((c) => {
+        const p = summaries.find((x) => x.studentId === c.id);
+        return { id: c.id, name: c.student ? c.student.fullName : c.id, billed: p ? p.lifetimeBilled : 0, paid: p ? p.lifetimePaid : 0, balance: p ? p.balance : 0 };
+      });
+      const totals = rows.reduce((a, r) => ({ billed: a.billed + r.billed, paid: a.paid + r.paid, balance: a.balance + r.balance }), { billed: 0, paid: 0, balance: 0 });
       const dataUrl = await generateFamilyBillImage(familyLabel.trim() || "Family", rows, totals);
       const result = await shareOrDownloadImage(dataUrl, `family-bill-${(familyLabel.trim() || "family").replace(/\s+/g, "-").toLowerCase()}.png`);
       if (result === "downloaded") setNote({ ok: true, text: "Image downloaded." });
       else if (result === "shared") setNote({ ok: true, text: "Shared." });
       else if (result === "failed") setNote({ ok: false, text: "Could not save the image \u2014 try again." });
     } finally {
-      setBusy(false);
+      setShareBusy(false);
     }
   }
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-3" }, "Pick the pupils to combine on one bill \u2014 siblings sharing a guardian will show a matching phone number. This pulls each pupil's current balance; it doesn't create a new record."), /* @__PURE__ */ React.createElement(Field, { label: "Family / household label (optional, appears on the bill)" }, /* @__PURE__ */ React.createElement("input", { value: familyLabel, onChange: (e) => setFamilyLabel(e.target.value), placeholder: "e.g. The Adamu Family", className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement(Field, { label: "Add pupils" }, /* @__PURE__ */ React.createElement("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: "Search by name, admission no., or guardian phone\u2026", className: inputCls, style: { borderColor: "#d8cfb8" } })), matches.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mb-3 space-y-1" }, matches.map((s) => /* @__PURE__ */ React.createElement("button", { key: s.id, onClick: () => addStudent(s.id), className: "w-full text-left text-sm px-3 py-2 rounded-lg border", style: { borderColor: "#d8cfb8", color: TEXT } }, s.fullName, " \u2014 ", /* @__PURE__ */ React.createElement("span", { style: { color: MUTED } }, s.id, s.guardianPhone ? ` \xB7 ${s.guardianPhone}` : "")))), selectedIds.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No pupils added yet.") : /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-2" }, rows.map((r) => /* @__PURE__ */ React.createElement("span", { key: r.id, style: { background: "#faf7ef", border: "1px solid #d8cfb8" }, className: "text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5" }, r.name, /* @__PURE__ */ React.createElement("button", { onClick: () => removeStudent(r.id), style: { color: "#a3341f" }, className: "font-bold" }, "\xD7"))))), rows.length > 0 && /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(TableShell, { head: ["Pupil", "Billed", "Paid", "Balance"] }, rows.map((r, i) => /* @__PURE__ */ React.createElement("tr", { key: r.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, r.name), /* @__PURE__ */ React.createElement(Td, null, naira(r.billed)), /* @__PURE__ */ React.createElement(Td, null, naira(r.paid)), /* @__PURE__ */ React.createElement(Td, null, /* @__PURE__ */ React.createElement("span", { style: { color: r.balance > 0 ? "#a3341f" : TEAL } }, naira(r.balance)))))), /* @__PURE__ */ React.createElement(SummaryRow, { label: "TOTAL BALANCE DUE", value: naira(totals.balance), bold: true, accent: totals.balance > 0 ? "#a3341f" : TEAL }), note && /* @__PURE__ */ React.createElement(Banner, { kind: note.ok ? "ok" : "error" }, note.text), /* @__PURE__ */ React.createElement("button", { onClick: handleShare, disabled: busy, style: { background: GOLD, color: INK }, className: "sans mt-3 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, busy ? "Preparing\u2026" : "Download / Share Family Bill (image)")));
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-xs mb-3" }, "Find every child under one guardian phone number, tick which fee items and which pupils to include, then collect one payment that\u2019s recorded separately for each pupil \u2014 their ledger, balance, and receipts update automatically."), /* @__PURE__ */ React.createElement(Field, { label: "Find by guardian phone number" }, /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("input", { value: phoneQuery, onChange: (e) => setPhoneQuery(e.target.value), placeholder: "e.g. 0803 000 0000", className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("button", { onClick: findByPhone, style: { background: TEAL, color: "#fff" }, className: "sans px-4 py-2 rounded-lg text-sm font-semibold shrink-0" }, "Find children"))), /* @__PURE__ */ React.createElement(Field, { label: "Or add a pupil by name / admission no." }, /* @__PURE__ */ React.createElement("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: "Search by name, admission no., or guardian phone\u2026", className: inputCls, style: { borderColor: "#d8cfb8" } })), matches.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mb-3 space-y-1" }, matches.map((s) => /* @__PURE__ */ React.createElement("button", { key: s.id, onClick: () => addStudent(s.id), className: "w-full text-left text-sm px-3 py-2 rounded-lg border", style: { borderColor: "#d8cfb8", color: TEXT } }, s.fullName, " \u2014 ", /* @__PURE__ */ React.createElement("span", { style: { color: MUTED } }, s.id, s.guardianPhone ? ` \xB7 ${s.guardianPhone}` : "")))), selectedIds.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "sans text-sm" }, "No pupils added yet.") : /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2 mb-1" }, children.map((c) => /* @__PURE__ */ React.createElement("span", { key: c.id, style: { background: "#faf7ef", border: "1px solid #d8cfb8" }, className: "text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5" }, c.student ? c.student.fullName : c.id, /* @__PURE__ */ React.createElement("button", { onClick: () => removeStudent(c.id), style: { color: "#a3341f" }, className: "font-bold" }, "\xD7")))), /* @__PURE__ */ React.createElement(Field, { label: "Family / household label (optional)" }, /* @__PURE__ */ React.createElement("input", { value: familyLabel, onChange: (e) => setFamilyLabel(e.target.value), placeholder: "e.g. The Adamu Family", className: inputCls, style: { borderColor: "#d8cfb8" } }))), children.map((c) => /* @__PURE__ */ React.createElement(FamilyChildCard, { key: c.id, c, updateChildState, includeIds, setIncludeIds, discountedAmount })), children.length > 0 && /* @__PURE__ */ React.createElement(Card, null, /* @__PURE__ */ React.createElement(PaymentTypeFields, { value: paymentDetails, onChange: setPaymentDetails }), /* @__PURE__ */ React.createElement("div", { className: "grid sm:grid-cols-2 gap-2 sans mt-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Collector"), /* @__PURE__ */ React.createElement("input", { value: collector, onChange: (e) => setCollector(e.target.value), placeholder: "Name of collector", className: inputCls, style: { borderColor: "#d8cfb8" } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: { color: MUTED }, className: "text-xs font-medium block mb-1" }, "Total received from parent (auto-splits oldest balance first)"), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("input", { type: "number", value: totalReceived, onChange: (e) => setTotalReceived(e.target.value), className: inputCls, style: { borderColor: "#d8cfb8" } }), /* @__PURE__ */ React.createElement("button", { onClick: autoFillSplit, style: { color: TEAL }, className: "text-xs font-semibold underline shrink-0" }, "Auto-fill")))), /* @__PURE__ */ React.createElement(SummaryRow, { label: "TOTAL DUE (included pupils)", value: naira(combinedTotalDue), bold: true }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "TOTAL ENTERED SO FAR", value: naira(combinedAmountPaid) }), /* @__PURE__ */ React.createElement(SummaryRow, { label: "REMAINING BALANCE", value: naira(combinedBalance), bold: true, accent: combinedBalance > 0 ? "#a3341f" : TEAL }), note && /* @__PURE__ */ React.createElement(Banner, { kind: note.ok ? "ok" : "error" }, note.text), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3 mt-3" }, /* @__PURE__ */ React.createElement("button", { onClick: saveFamilyPayment, disabled: busy, style: { background: TEAL, color: "#fff" }, className: "sans px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, busy ? "Saving\u2026" : "Save family payment"), /* @__PURE__ */ React.createElement("button", { onClick: handleShare, disabled: shareBusy, style: { background: GOLD, color: INK }, className: "sans px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, shareBusy ? "Preparing\u2026" : "Download / Share Family Bill (image)")), saveResults.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4" }, /* @__PURE__ */ React.createElement("h4", { style: { color: INK }, className: "font-serif text-sm font-semibold mb-2" }, "Payments saved"), /* @__PURE__ */ React.createElement(TableShell, { head: ["Pupil", "Receipt", "Status"] }, saveResults.map((r, i) => /* @__PURE__ */ React.createElement("tr", { key: r.id, style: rowStyle(i) }, /* @__PURE__ */ React.createElement(Td, null, r.name), /* @__PURE__ */ React.createElement(Td, { mono: true }, r.ok ? r.receipt.receiptNo : "\u2014"), /* @__PURE__ */ React.createElement(Td, null, r.ok ? /* @__PURE__ */ React.createElement("span", { style: { color: TEAL } }, "Saved") : /* @__PURE__ */ React.createElement("span", { style: { color: "#a3341f" } }, r.error))))))));
 }
 function PayersTab({ fin, students, classes }) {
   const [filterTown, setFilterTown] = useState("All");
@@ -7838,6 +8011,7 @@ function LoginAccessCard({ person, isStudent }) {
   const [auth, setAuth] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [createdCreds, setCreatedCreds] = useState(null);
   useEffect(() => {
     (async () => setAuth(await getJSON(K.auth, { users: [] })))();
   }, [person.id]);
@@ -7863,11 +8037,85 @@ function LoginAccessCard({ person, isStudent }) {
       setBusy(false);
     }
   }
+  async function generateLogin() {
+    setBusy(true);
+    setNote(null);
+    setCreatedCreds(null);
+    try {
+      const fresh = await getJSON(K.auth, { users: [] });
+      if (fresh.users.find((u) => u.personId === person.id)) {
+        setAuth(fresh);
+        setNote({ kind: "error", text: "A login account already exists for this person - refresh to see it." });
+        return;
+      }
+      const existing = new Set(fresh.users.map((u) => u.username));
+      const username = deriveLoginUsername(person.fullName, person.id, existing);
+      const tempPassword = person.id;
+      const salt = randomSalt();
+      const hash = await sha256(salt + tempPassword);
+      const newUser = {
+        username,
+        role: isStudent ? "Student" : "Staff",
+        personId: person.id,
+        fullName: person.fullName,
+        staffRole: isStudent ? void 0 : effectiveStaffRole(person),
+        salt,
+        hash,
+        mustChangePassword: true,
+        securityQuestion: "",
+        securityAnswerHash: ""
+      };
+      const next = { users: [...fresh.users, newUser] };
+      setAuth(next);
+      await setJSON(K.auth, next);
+      setCreatedCreds({ username, password: tempPassword });
+      setNote({ kind: "ok", text: "Login created." });
+    } catch (err) {
+      setNote({ kind: "error", text: "Could not create the login." });
+    } finally {
+      setBusy(false);
+    }
+  }
   if (!auth) return null;
   const account = auth.users.find((u) => u.personId === person.id);
   const linkedParent = isStudent ? auth.users.find((u) => u.role === "Parent" && (u.linkedStudentIds || []).includes(person.id)) : null;
   const rowStyle2 = { background: "#faf7ef" };
-  return /* @__PURE__ */ React.createElement("div", { className: "mt-4" }, /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "text-xs font-medium mb-1.5" }, "Login access"), note && /* @__PURE__ */ React.createElement("div", { className: "text-xs mb-2 px-3 py-2 rounded", style: { background: note.kind === "ok" ? "#e7f0ea" : "#fbe9e7", color: note.kind === "ok" ? TEAL : "#a3341f" } }, note.text), /* @__PURE__ */ React.createElement("div", { className: "space-y-2" }, account ? /* @__PURE__ */ React.createElement("div", { className: "text-sm px-3 py-2 rounded", style: rowStyle2 }, /* @__PURE__ */ React.createElement("div", { style: { color: TEXT } }, isStudent ? "Pupil login — " : "Staff login — ", "username: ", /* @__PURE__ */ React.createElement("span", { className: "font-mono" }, account.username)), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "text-xs mt-0.5" }, account.mustChangePassword ? `Still using the default password — their ID: ${person.id}` : "They have set their own password — not shown, for security."), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => resetToDefault(account.username), color: TEAL }, busy ? "\\u2026" : "Reset to default password")) : /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-sm" }, "No login account yet — one is created automatically the first time they open the portal."), isStudent && (linkedParent ? /* @__PURE__ */ React.createElement("div", { className: "text-sm px-3 py-2 rounded", style: rowStyle2 }, /* @__PURE__ */ React.createElement("div", { style: { color: TEXT } }, "Parent login — username: ", /* @__PURE__ */ React.createElement("span", { className: "font-mono" }, linkedParent.username), " (", linkedParent.fullName, ")"), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "text-xs mt-0.5" }, linkedParent.mustChangePassword ? `Still using the default password — this pupil's ID: ${person.id}` : "They have set their own password — not shown, for security."), /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => resetToDefault(linkedParent.username), color: TEAL }, busy ? "\\u2026" : "Reset to default password")) : /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-sm" }, "No parent account linked yet — use “Parent login” in Records to create one."))));
+  return /* @__PURE__ */ React.createElement(
+    "div",
+    { className: "mt-4" },
+    /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "text-xs font-medium mb-1.5" }, "Login access"),
+    note && /* @__PURE__ */ React.createElement("div", { className: "text-xs mb-2 px-3 py-2 rounded", style: { background: note.kind === "ok" ? "#e7f0ea" : "#fbe9e7", color: note.kind === "ok" ? TEAL : "#a3341f" } }, note.text),
+    createdCreds && /* @__PURE__ */ React.createElement(
+      "div",
+      { style: { background: "#faf7ef", border: `1px dashed ${GOLD}` }, className: "rounded-lg px-3 py-2 mb-2" },
+      /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-xs mb-1" }, "Give these to them - they'll set their own password on first login."),
+      /* @__PURE__ */ React.createElement("p", { style: { color: INK }, className: "text-sm" }, "Username: ", /* @__PURE__ */ React.createElement("span", { className: "font-mono" }, createdCreds.username)),
+      /* @__PURE__ */ React.createElement("p", { style: { color: INK }, className: "text-sm" }, "Temp password: ", /* @__PURE__ */ React.createElement("span", { className: "font-mono" }, createdCreds.password))
+    ),
+    /* @__PURE__ */ React.createElement(
+      "div",
+      { className: "space-y-2" },
+      account ? /* @__PURE__ */ React.createElement(
+        "div",
+        { className: "text-sm px-3 py-2 rounded", style: rowStyle2 },
+        /* @__PURE__ */ React.createElement("div", { style: { color: TEXT } }, isStudent ? "Pupil login \u2014 " : "Staff login \u2014 ", "username: ", /* @__PURE__ */ React.createElement("span", { className: "font-mono" }, account.username)),
+        /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "text-xs mt-0.5" }, account.mustChangePassword ? `Still using the default password - their ID: ${person.id}` : "They have set their own password - not shown, for security."),
+        /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => resetToDefault(account.username), color: TEAL }, busy ? "..." : "Reset to default password")
+      ) : /* @__PURE__ */ React.createElement(
+        "div",
+        null,
+        /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-sm mb-2" }, "No login account yet - one is normally created automatically the first time they open the portal, but you can generate it now instead. Useful when the automatic username might clash with someone sharing the same first name."),
+        /* @__PURE__ */ React.createElement("button", { type: "button", onClick: generateLogin, disabled: busy, style: { background: GOLD, color: INK }, className: "px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" }, busy ? "Generating..." : "Generate login now")
+      ),
+      isStudent && (linkedParent ? /* @__PURE__ */ React.createElement(
+        "div",
+        { className: "text-sm px-3 py-2 rounded", style: rowStyle2 },
+        /* @__PURE__ */ React.createElement("div", { style: { color: TEXT } }, "Parent login \u2014 username: ", /* @__PURE__ */ React.createElement("span", { className: "font-mono" }, linkedParent.username), " (", linkedParent.fullName, ")"),
+        /* @__PURE__ */ React.createElement("div", { style: { color: MUTED }, className: "text-xs mt-0.5" }, linkedParent.mustChangePassword ? `Still using the default password - this pupil's ID: ${person.id}` : "They have set their own password - not shown, for security."),
+        /* @__PURE__ */ React.createElement(LinkBtn, { onClick: () => resetToDefault(linkedParent.username), color: TEAL }, busy ? "..." : "Reset to default password")
+      ) : /* @__PURE__ */ React.createElement("p", { style: { color: MUTED }, className: "text-sm" }, "No parent account linked yet - use \u201CParent login\u201D in Records to create one."))
+    )
+  );
 }
 function PersonProfileModal({ person, kind, onClose, onEdit }) {
   const isStudent = kind === "student";
