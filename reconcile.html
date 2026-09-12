@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MTAF Sync Reconciliation Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/supabase.min.js" onerror="document.addEventListener('DOMContentLoaded', function(){ document.getElementById('loginMsg').innerHTML = '<div class=\'msg bad\'>The Supabase library failed to load from the internet (cdnjs.cloudflare.com). This page needs an active connection to that address the first time it opens \u2014 check your data/Wi-Fi, or try opening this file in a different browser.</div>'; document.getElementById('loginBtn').disabled = true; })"></script>
+<style>
+  :root { --teal:#2f6f62; --gold:#c9a24b; --ink:#2a2a28; --muted:#6b6459; --bg:#faf7ef; --bad:#a3341f; --badbg:#fbe9e7; --goodbg:#e7f0ea; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); margin: 0; padding: 16px; }
+  h1 { font-size: 1.1rem; margin: 0 0 4px; }
+  p.sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 16px; }
+  .card { background: #fff; border: 1px solid #e3dac2; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  label { display:block; font-size:0.8rem; color: var(--muted); margin-bottom: 4px; }
+  input, select { width:100%; padding: 8px 10px; border:1px solid #d8cfb8; border-radius:6px; font-size:0.9rem; margin-bottom:10px; }
+  button { background: var(--teal); color:#fff; border:none; border-radius: 20px; padding: 9px 16px; font-size:0.85rem; font-weight:600; cursor:pointer; }
+  button.secondary { background: var(--gold); color: var(--ink); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .msg { font-size:0.85rem; padding:8px 10px; border-radius:6px; margin-bottom:10px; }
+  .msg.bad { background: var(--badbg); color: var(--bad); }
+  .msg.good { background: var(--goodbg); color: var(--teal); }
+  table { width:100%; border-collapse: collapse; font-size: 0.82rem; }
+  th, td { text-align:left; padding: 6px 8px; border-bottom: 1px solid #eee2c9; vertical-align: top; }
+  th { color: var(--muted); font-weight:600; }
+  .tag { display:inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.72rem; font-weight:600; }
+  .tag.legacy-only { background:#fdecea; color:#a3341f; }
+  .tag.scoped-only { background:#e7f0ea; color:#2f6f62; }
+  .tag.both-diff { background:#fff3d6; color:#8a6a1a; }
+  .tag.match { background:#eee; color:#888; }
+  .tag.empty { background:#eee; color:#aaa; }
+  code { font-size: 0.78rem; background:#f4f0e2; padding: 1px 5px; border-radius:4px; }
+  .small { font-size: 0.75rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>MTAF Sync Reconciliation Tool</h1>
+<p class="sub">Read-only diagnostic first. Nothing is changed until you press a "Copy into shared table" button for a specific key.</p>
+
+<div class="card" id="loginCard">
+  <label>Username (same as the portal login)</label>
+  <input id="username" autocomplete="username" />
+  <label>Password</label>
+  <input id="password" type="password" autocomplete="current-password" />
+  <label>Role</label>
+  <select id="role">
+    <option value="Staff">Staff</option>
+    <option value="Student">Student</option>
+    <option value="Parent">Parent</option>
+  </select>
+  <div class="row">
+    <button id="loginBtn">Sign in &amp; scan</button>
+  </div>
+  <div id="loginMsg"></div>
+</div>
+
+<div class="card" id="resultsCard" style="display:none;">
+  <div id="statusLine" class="small" style="margin-bottom:10px;"></div>
+  <table>
+    <thead><tr><th>Data key</th><th>Legacy table<br/><span class="small">(mtaf_store)</span></th><th>Shared table<br/><span class="small">(mtaf_documents, this school)</span></th><th>Status</th><th></th></tr></thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+</div>
+
+<script>
+// Surface anything that goes wrong instead of failing silently \u2014
+// content:// / file:// pages can hit odd, invisible errors (blocked
+// storage, blocked CDN, opaque origin) that would otherwise just look
+// like "nothing happens when I tap the button".
+window.addEventListener("error", function (e) {
+  showFatal("Page error: " + (e.message || "unknown error"));
+});
+window.addEventListener("unhandledrejection", function (e) {
+  showFatal("Error: " + ((e.reason && e.reason.message) || e.reason || "unknown error"));
+});
+function showFatal(text) {
+  var el = document.getElementById("loginMsg");
+  if (el) el.innerHTML = '<div class="msg bad">' + text + "</div>";
+  else alert(text);
+}
+
+const SUPABASE_URL = "https://smrmnsoqohtespbgdjym.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_4swjn4U3QrFn2_04VieQOw_zTgGkBvM";
+const SUPABASE_TABLE = "mtaf_store";
+const KEYS = [
+  "mtaf-records", "mtaf-class-management", "mtaf-finance", "mtaf-academics",
+  "mtaf-attendance", "mtaf-control", "mtaf-announcements", "mtaf-communication",
+  "mtaf-library", "mtaf-settings", "mtaf-backups-index", "mtaf-cbt",
+  "mtaf-scheme-of-work", "mtaf-attendance-audit", "mtaf-attendance-notices",
+  "mtaf-cashier-closings", "mtaf-book-distribution", "mtaf-inventory",
+  "mtaf-login-history"
+];
+
+let sb = null;
+let initError = null;
+try {
+  if (!window.supabase) throw new Error("The Supabase library didn't load (no internet access to cdnjs.cloudflare.com when this page opened). Reload with a working connection.");
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {
+  initError = e;
+}
+
+function emailForUsername(username) {
+  const clean = String(username || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+  return `${clean || "user"}@mtaf.local`;
+}
+
+function setLoginMsg(text, isBad) {
+  const el = document.getElementById("loginMsg");
+  el.innerHTML = text ? `<div class="msg ${isBad ? "bad" : "good"}">${text}</div>` : "";
+}
+
+function roughSize(value) {
+  if (value === undefined || value === null) return "empty";
+  if (Array.isArray(value)) return `array, ${value.length} item(s)`;
+  if (typeof value === "object") {
+    const keys = Object.keys(value);
+    // Special-case the shapes we know, to make counts recognizable at a glance.
+    const parts = [];
+    for (const k of keys) {
+      const v = value[k];
+      if (Array.isArray(v)) parts.push(`${k}: ${v.length}`);
+    }
+    return parts.length ? parts.join(", ") : `object (${keys.length} field(s))`;
+  }
+  return String(value).slice(0, 60);
+}
+
+function deepEqual(a, b) {
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
+}
+
+let currentSchoolId = null;
+
+async function signInExisting(email, password) {
+  let { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    await new Promise((r) => setTimeout(r, 800));
+    ({ data, error } = await sb.auth.signInWithPassword({ email, password }));
+  }
+  if (error) throw error;
+  return data;
+}
+
+async function doLogin() {
+  if (initError || !sb) {
+    setLoginMsg((initError && initError.message) || "Setup failed \u2014 see error above.", true);
+    return;
+  }
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  const role = document.getElementById("role").value;
+  if (!username || !password) { setLoginMsg("Enter your username and password.", true); return; }
+  const btn = document.getElementById("loginBtn");
+  btn.disabled = true;
+  setLoginMsg("Checking credentials\u2026", false);
+  try {
+    // Step 1: verify the legacy username/password via the same edge function
+    // the portal uses. This also refreshes/creates the matching Supabase
+    // Auth account server-side with this exact password, so the sign-in
+    // below is expected to succeed.
+    const loginRes = await sb.functions.invoke("clever-function", {
+      body: { action: "login", username, password, role }
+    });
+    const loginBody = loginRes && loginRes.data;
+    if (!loginBody || loginBody.ok !== true) {
+      throw new Error((loginBody && loginBody.error) || "Login failed \u2014 check the username, password and role.");
+    }
+
+    // Step 2: establish the real Supabase Auth session against the same
+    // derived email, so reads are subject to the normal RLS as this user.
+    const email = emailForUsername(username);
+    const authData = await signInExisting(email, password);
+    const uid = authData && authData.user && authData.user.id;
+    if (!uid || !authData.session) throw new Error("Signed in, but no session came back \u2014 try again in a moment.");
+
+    const { data: prof, error: profErr } = await sb.from("profiles").select("id,school_id").eq("id", uid).maybeSingle();
+    if (profErr) throw profErr;
+    if (!prof || !prof.school_id) throw new Error("Signed in, but couldn't find a school_id on this account's profile.");
+    currentSchoolId = prof.school_id;
+
+    setLoginMsg(`Signed in. School ID: <code>${currentSchoolId}</code>. Scanning ${KEYS.length} data keys\u2026`, false);
+    await scanAll();
+    setLoginMsg("Scan complete.", false);
+  } catch (err) {
+    setLoginMsg((err && err.message) || String(err), true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function fetchLegacy(key) {
+  const { data, error } = await sb.from(SUPABASE_TABLE).select("value,updated_at").eq("key", key).maybeSingle();
+  if (error) throw error;
+  return data ? { value: data.value, updatedAt: data.updated_at } : null;
+}
+
+async function fetchScoped(key) {
+  const { data, error } = await sb.from("mtaf_documents").select("payload,updated_at").eq("school_id", currentSchoolId).eq("data_key", key).maybeSingle();
+  if (error) throw error;
+  return data ? { value: data.payload, updatedAt: data.updated_at } : null;
+}
+
+async function copyLegacyIntoScoped(key, legacyValue) {
+  if (!confirm(`Copy the legacy value for "${key}" into the shared school table?\n\nThis will overwrite whatever is currently there for this school on this key.`)) return;
+  const { error } = await sb.from("mtaf_documents").upsert(
+    { school_id: currentSchoolId, data_key: key, payload: legacyValue },
+    { onConflict: "school_id,data_key" }
+  );
+  if (error) { alert("Copy failed: " + error.message); return; }
+  alert(`Copied "${key}" into the shared table. Reloading its row below.`);
+  await scanOne(key);
+}
+
+function rowId(key) { return "row-" + key.replace(/[^a-z0-9]/gi, "_"); }
+
+async function scanOne(key) {
+  const tr = document.getElementById(rowId(key));
+  let legacy = null, scoped = null, err = null;
+  try {
+    [legacy, scoped] = await Promise.all([fetchLegacy(key), fetchScoped(key)]);
+  } catch (e) {
+    err = e;
+  }
+  if (err) {
+    tr.innerHTML = `<td><code>${key}</code></td><td colspan="3" class="small">Error: ${err.message}</td>`;
+    return;
+  }
+  const legacyVal = legacy ? legacy.value : undefined;
+  const scopedVal = scoped ? scoped.value : undefined;
+  let tag, tagClass;
+  if (legacy && !scoped) { tag = "legacy only \u2014 not visible to other devices"; tagClass = "legacy-only"; }
+  else if (!legacy && scoped) { tag = "shared table only \u2014 normal"; tagClass = "scoped-only"; }
+  else if (!legacy && !scoped) { tag = "no data yet"; tagClass = "empty"; }
+  else if (deepEqual(legacyVal, scopedVal)) { tag = "match"; tagClass = "match"; }
+  else { tag = "DIFFERS \u2014 review"; tagClass = "both-diff"; }
+
+  const showCopyBtn = legacy && (!scoped || !deepEqual(legacyVal, scopedVal));
+  tr.innerHTML = `
+    <td><code>${key}</code></td>
+    <td>${legacy ? roughSize(legacyVal) + (legacy.updatedAt ? `<div class="small">updated ${legacy.updatedAt}</div>` : "") : "\u2014"}</td>
+    <td>${scoped ? roughSize(scopedVal) + (scoped.updatedAt ? `<div class="small">updated ${scoped.updatedAt}</div>` : "") : "\u2014"}</td>
+    <td><span class="tag ${tagClass}">${tag}</span></td>
+    <td>${showCopyBtn ? `<button class="secondary copy-btn" data-key="${key}">Copy legacy \u2192 shared</button>` : ""}</td>
+  `;
+  const copyBtn = tr.querySelector(".copy-btn");
+  if (copyBtn) copyBtn.addEventListener("click", () => copyLegacyIntoScoped(key, legacyVal));
+}
+
+async function scanAll() {
+  const card = document.getElementById("resultsCard");
+  const body = document.getElementById("resultsBody");
+  card.style.display = "block";
+  document.getElementById("statusLine").textContent = `School ID: ${currentSchoolId}`;
+  body.innerHTML = KEYS.map((k) => `<tr id="${rowId(k)}"><td><code>${k}</code></td><td colspan="4" class="small">Loading\u2026</td></tr>`).join("");
+  // A few at a time to be gentle on the connection.
+  const CONCURRENCY = 3;
+  for (let i = 0; i < KEYS.length; i += CONCURRENCY) {
+    await Promise.all(KEYS.slice(i, i + CONCURRENCY).map(scanOne));
+  }
+}
+
+document.getElementById("loginBtn").addEventListener("click", doLogin);
+document.getElementById("password").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+</script>
+</body>
+    </html>
+    
