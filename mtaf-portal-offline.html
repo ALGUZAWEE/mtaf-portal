@@ -611,12 +611,32 @@ async function ensureShadowAuthSession(username, password, legacyRole) {
   try {
     let { data, error } = await sbClient.auth.signInWithPassword({ email, password });
     if (error) {
+      // The server keeps this Supabase Auth password in sync with the
+      // legacy one on every successful login, so a failure here almost
+      // always means a transient network blip \u2014 not a genuinely new
+      // account. Retry the sign-in once before assuming it's new, so a
+      // flaky connection doesn't push us into signUp() against an email
+      // that already exists (which returns no usable session and used to
+      // leave this device stuck silently unsynced).
+      await new Promise((r) => setTimeout(r, 800));
+      ({ data, error } = await sbClient.auth.signInWithPassword({ email, password }));
+    }
+    if (error) {
       const signUp = await sbClient.auth.signUp({ email, password });
       if (signUp.error) throw signUp.error;
       data = signUp.data;
     }
     const uid = data && data.user && data.user.id;
-    if (!uid) return false;
+    const hasSession = !!(data && data.session);
+    if (!uid || !hasSession) {
+      // signUp() against an email that already exists can return a user
+      // object with no session and no error (Supabase's anti-enumeration
+      // behavior). Treat that as "still not signed in" rather than success
+      // \u2014 without a session there's no bearer token, so every request
+      // this device makes afterwards would silently fail RLS checks.
+      setSyncStatus("no-session");
+      return false;
+    }
     currentAuthUserId = uid;
     currentActorName = username;
     const { data: prof } = await sbClient.from("profiles").select("id,school_id").eq("id", uid).maybeSingle();
@@ -630,11 +650,75 @@ async function ensureShadowAuthSession(username, password, legacyRole) {
       }
     }
     shadowAuthReady = !!currentSchoolId;
-    if (shadowAuthReady) cacheSchoolContext(uid, currentSchoolId);
+    if (shadowAuthReady) {
+      cacheSchoolContext(uid, currentSchoolId);
+      setSyncStatus("ok");
+    } else {
+      setSyncStatus("no-profile");
+    }
     return shadowAuthReady;
   } catch (err) {
+    setSyncStatus("retrying");
     console.warn("MTAF: background account sync skipped \u2014", err && err.message ? err.message : err);
     return false;
+  }
+}
+// --- Self-healing school-context resolver -----------------------------------
+// currentSchoolId can end up stuck at null on a device (a network blip during
+// login, a stale/expired background session, etc.). When that happens this
+// device silently stops writing to/reading from the shared "mtaf_documents"
+// table and drops into the disconnected legacy table instead \u2014 which is
+// how "someone else's changes don't show up on my phone" happens. This
+// resolver is safe to call repeatedly: it only touches an EXISTING Supabase
+// Auth session (never prompts for a password), and is re-tried on a timer so
+// a device can recover on its own once the network/session is healthy again,
+// without needing a manual re-login.
+let schoolContextAttemptInFlight = false;
+let syncStatus = "ok";
+function setSyncStatus(next) {
+  if (syncStatus === next) return;
+  syncStatus = next;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("mtaf-sync-status", { detail: { status: next } }));
+  }
+}
+async function tryResolveSchoolContext() {
+  if (!sbClient || currentSchoolId || schoolContextAttemptInFlight) return !!currentSchoolId;
+  schoolContextAttemptInFlight = true;
+  try {
+    const { data } = await sbClient.auth.getSession();
+    const s = data && data.session;
+    const uid = s && s.user && s.user.id;
+    if (!uid) {
+      const cached = loadCachedSchoolContext();
+      if (cached && cached.schoolId) {
+        currentSchoolId = cached.schoolId;
+        currentAuthUserId = cached.uid;
+        shadowAuthReady = true;
+        setSyncStatus("ok");
+        return true;
+      }
+      setSyncStatus("no-session");
+      return false;
+    }
+    currentAuthUserId = uid;
+    const { data: prof, error: profErr } = await sbClient.from("profiles").select("id,school_id").eq("id", uid).maybeSingle();
+    if (profErr) throw profErr;
+    if (prof && prof.school_id) {
+      currentSchoolId = prof.school_id;
+      shadowAuthReady = true;
+      cacheSchoolContext(uid, prof.school_id);
+      setSyncStatus("ok");
+      return true;
+    }
+    setSyncStatus("no-profile");
+    return false;
+  } catch (err) {
+    console.warn("MTAF: school-context resolve retry failed \u2014", err && err.message ? err.message : err);
+    setSyncStatus("retrying");
+    return false;
+  } finally {
+    schoolContextAttemptInFlight = false;
   }
 }
 async function logDbAudit(action, dataKey) {
@@ -2355,14 +2439,33 @@ function App() {
     if (!session || typeof window === "undefined") return;
     const onRemoteUpdate = () => setReloadKey((k) => k + 1);
     window.addEventListener("mtaf-remote-update", onRemoteUpdate);
-    const starter = setInterval(() => {
-      if (currentSchoolId) setupRealtimeSync(currentSchoolId);
+    const starter = setInterval(async () => {
+      if (currentSchoolId) {
+        setupRealtimeSync(currentSchoolId);
+        return;
+      }
+      // No branch resolved yet on this device \u2014 keep quietly retrying
+      // instead of staying stuck until the next full reload.
+      const recovered = await tryResolveSchoolContext();
+      if (recovered) {
+        setupRealtimeSync(currentSchoolId);
+        resyncUnsyncedDocKeys();
+        setReloadKey((k) => k + 1);
+      }
     }, 3e3);
     if (currentSchoolId) setupRealtimeSync(currentSchoolId);
+    else tryResolveSchoolContext();
     return () => {
       window.removeEventListener("mtaf-remote-update", onRemoteUpdate);
       clearInterval(starter);
     };
+  }, [session]);
+  const [syncBannerStatus, setSyncBannerStatus] = useState(() => currentSchoolId ? "ok" : "checking");
+  useEffect(() => {
+    if (!session || typeof window === "undefined") return;
+    const onStatus = (e) => setSyncBannerStatus((e.detail && e.detail.status) || "ok");
+    window.addEventListener("mtaf-sync-status", onStatus);
+    return () => window.removeEventListener("mtaf-sync-status", onStatus);
   }, [session]);
   useEffect(() => {
     if (!session || !sbClient) {
@@ -2481,7 +2584,7 @@ Only do this if you're sure the live data is wrong and this file is correct. Con
           #mtaf-print-area, #mtaf-print-area * { visibility: visible !important; }
           #mtaf-print-area { position: absolute; left: 0; top: 0; width: 100%; }
         }
-      `), /* @__PURE__ */ React.createElement("div", { id: "mtaf-print-area" }), /* @__PURE__ */ React.createElement("div", { style: { background: "#faf7ef", borderBottom: "1px solid #d8cfb8" }, className: "px-4 py-2 flex items-center justify-between gap-2 sans flex-wrap mtaf-offline" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, storageWorking ? 'Data is saved automatically as you go. Use "Save to file" now and then to keep an offline backup.' : hasPersistentStorage ? `Storage isn't responding right now \u2014 your changes are kept safely for this session, but won't survive a reload until it recovers. Use "Save to file" often.` : "Running in offline mode \u2014 data lives in this session only. Save often."), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("button", { onClick: handleSaveToFile, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-1.5 rounded-full" }, "Save to file"), /* @__PURE__ */ React.createElement("button", { onClick: handleImportClick, disabled: importBusy, style: { background: GOLD, color: INK }, className: "text-xs font-medium px-3 py-1.5 rounded-full disabled:opacity-50" }, importBusy ? "Loading\u2026" : "Load from file"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "application/json", onChange: handleFileChange, style: { display: "none" } }))), bannerMsg && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: bannerIsError ? "#fbe9e7" : "#e7f0ea", color: bannerIsError ? "#a3341f" : TEAL } }, bannerMsg), restoringSession ? /* @__PURE__ */ React.createElement("div", { className: "flex-1 flex items-center justify-center py-16 sans text-sm", style: { color: MUTED } }, "Reconnecting\u2026") : !session ? /* @__PURE__ */ React.createElement(AuthGate, { key: reloadKey, onLogin: setSession }) : /* @__PURE__ */ React.createElement(Shell, { key: reloadKey, session, onLogout: () => {
+      `), /* @__PURE__ */ React.createElement("div", { id: "mtaf-print-area" }), /* @__PURE__ */ React.createElement("div", { style: { background: "#faf7ef", borderBottom: "1px solid #d8cfb8" }, className: "px-4 py-2 flex items-center justify-between gap-2 sans flex-wrap mtaf-offline" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, storageWorking ? 'Data is saved automatically as you go. Use "Save to file" now and then to keep an offline backup.' : hasPersistentStorage ? `Storage isn't responding right now \u2014 your changes are kept safely for this session, but won't survive a reload until it recovers. Use "Save to file" often.` : "Running in offline mode \u2014 data lives in this session only. Save often."), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("button", { onClick: handleSaveToFile, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-1.5 rounded-full" }, "Save to file"), /* @__PURE__ */ React.createElement("button", { onClick: handleImportClick, disabled: importBusy, style: { background: GOLD, color: INK }, className: "text-xs font-medium px-3 py-1.5 rounded-full disabled:opacity-50" }, importBusy ? "Loading\u2026" : "Load from file"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "application/json", onChange: handleFileChange, style: { display: "none" } }))), session && storageWorking && syncBannerStatus !== "ok" && syncBannerStatus !== "checking" && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: "#fbe9e7", color: "#a3341f" } }, "This device isn't syncing with the school's shared data right now \u2014 anything saved here won't show on other phones, and their changes won't show here, until this reconnects. Trying again automatically; if it doesn't clear in a minute, log out and back in."), bannerMsg && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: bannerIsError ? "#fbe9e7" : "#e7f0ea", color: bannerIsError ? "#a3341f" : TEAL } }, bannerMsg), restoringSession ? /* @__PURE__ */ React.createElement("div", { className: "flex-1 flex items-center justify-center py-16 sans text-sm", style: { color: MUTED } }, "Reconnecting\u2026") : !session ? /* @__PURE__ */ React.createElement(AuthGate, { key: reloadKey, onLogin: setSession }) : /* @__PURE__ */ React.createElement(Shell, { key: reloadKey, session, onLogout: () => {
     clearRememberedSession();
     try {
       if (window.localStorage) window.localStorage.removeItem(SCHOOL_CACHE_KEY);
