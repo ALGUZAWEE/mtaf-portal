@@ -4,7 +4,39 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>MTAF Sync Reconciliation Tool</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/supabase.min.js" onerror="document.addEventListener('DOMContentLoaded', function(){ document.getElementById('loginMsg').innerHTML = '<div class=\'msg bad\'>The Supabase library failed to load from the internet (cdnjs.cloudflare.com). This page needs an active connection to that address the first time it opens \u2014 check your data/Wi-Fi, or try opening this file in a different browser.</div>'; document.getElementById('loginBtn').disabled = true; })"></script>
+<script>
+// Try a few different CDNs in order, since any single one can be
+// blocked/slow on a given mobile network. Only give up if all fail.
+window.__sbLoadTried = [];
+window.__sbLoadSources = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js",
+  "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.45.4/supabase.min.js"
+];
+function __sbTryNext() {
+  if (window.supabase) return; // a previous attempt already succeeded
+  var src = window.__sbLoadSources.shift();
+  if (!src) {
+    document.addEventListener("DOMContentLoaded", function () {
+      var el = document.getElementById("loginMsg");
+      if (el) el.innerHTML = '<div class="msg bad">Couldn\'t load the Supabase library from any of the usual sources (jsdelivr, unpkg, cdnjs). This device\'s current connection seems to be blocking all of them \u2014 try switching between Wi-Fi and mobile data, or try a different network.</div>';
+      var btn = document.getElementById("loginBtn");
+      if (btn) btn.disabled = true;
+    });
+    return;
+  }
+  window.__sbLoadTried.push(src);
+  var s = document.createElement("script");
+  s.src = src;
+  s.onerror = __sbTryNext;
+  s.onload = function () {
+    // Some CDNs/builds attach differently; normalize just in case.
+    if (!window.supabase && window.Supabase) window.supabase = window.Supabase;
+  };
+  document.head.appendChild(s);
+}
+__sbTryNext();
+</script>
 <style>
   :root { --teal:#2f6f62; --gold:#c9a24b; --ink:#2a2a28; --muted:#6b6459; --bg:#faf7ef; --bad:#a3341f; --badbg:#fbe9e7; --goodbg:#e7f0ea; }
   * { box-sizing: border-box; }
@@ -51,9 +83,9 @@
     <option value="Parent">Parent</option>
   </select>
   <div class="row">
-    <button id="loginBtn">Sign in &amp; scan</button>
+    <button id="loginBtn" disabled>Sign in &amp; scan</button>
   </div>
-  <div id="loginMsg"></div>
+  <div id="loginMsg"><div class="msg good">Loading library...</div></div>
 </div>
 
 <div class="card" id="resultsCard" style="display:none;">
@@ -95,12 +127,40 @@ const KEYS = [
 
 let sb = null;
 let initError = null;
-try {
-  if (!window.supabase) throw new Error("The Supabase library didn't load (no internet access to cdnjs.cloudflare.com when this page opened). Reload with a working connection.");
-  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-} catch (e) {
-  initError = e;
+
+function ensureClient() {
+  if (sb) return true;
+  if (!window.supabase) return false;
+  try {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return true;
+  } catch (e) {
+    initError = e;
+    return false;
+  }
 }
+
+// The library loads asynchronously (possibly after trying a couple of
+// CDNs), so poll briefly for it instead of assuming it's ready the
+// instant this script runs.
+(function waitForLibrary(attemptsLeft) {
+  if (ensureClient()) {
+    setLoginMsg("", false);
+    document.getElementById("loginBtn").disabled = false;
+    return;
+  }
+  if (window.__sbLoadSources && window.__sbLoadSources.length === 0 && !window.supabase && attemptsLeft <= 0) {
+    // The loader already exhausted every CDN and gave up \u2014 its own
+    // message is already showing, nothing more to do here.
+    return;
+  }
+  if (attemptsLeft <= 0) {
+    initError = initError || new Error("The Supabase library is taking unusually long to load. Check your connection and reload the page.");
+    setLoginMsg(initError.message, true);
+    return;
+  }
+  setTimeout(() => waitForLibrary(attemptsLeft - 1), 300);
+})(40); // ~12 seconds across a few CDN attempts
 
 function emailForUsername(username) {
   const clean = String(username || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
@@ -266,5 +326,4 @@ document.getElementById("loginBtn").addEventListener("click", doLogin);
 document.getElementById("password").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
 </script>
 </body>
-    </html>
-    
+</html>
