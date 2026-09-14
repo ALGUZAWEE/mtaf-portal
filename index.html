@@ -2766,7 +2766,19 @@ function AuthGate({ onLogin }) {
         return;
       }
       const user = data.user;
-      await ensureShadowAuthSession(uname, password, user.role);
+      let synced = await ensureShadowAuthSession(uname, password, user.role);
+      if (!synced && data.authSyncOk === false) {
+        // The server itself couldn't confirm this account's background
+        // password sync went through \u2014 that's the known cause of
+        // "changes don't show on other devices" bugs. Retry a couple
+        // more times with a short pause rather than silently moving on
+        // with a broken background session.
+        for (let attempt = 0; attempt < 2 && !synced; attempt++) {
+          await new Promise((r) => setTimeout(r, 700));
+          synced = await ensureShadowAuthSession(uname, password, user.role);
+        }
+      }
+      if (!synced) setSyncStatus("retrying");
       if (user.mustChangePassword) {
         setPendingUser(user);
         setScreen("changePassword");
