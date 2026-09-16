@@ -96,6 +96,15 @@ __sbTryNext();
   </table>
 </div>
 
+<div class="card" id="restoreCard" style="display:none;">
+  <h1 style="font-size:1rem;margin:0 0 6px;">Restore students &amp; staff from a backup file</h1>
+  <p class="sub" style="margin-bottom:10px;">Only touches the <code>mtaf-records</code> data (students &amp; staff). Every other module (finance, attendance, inventory, etc.) is left exactly as it is now.</p>
+  <input type="file" id="restoreFile" accept="application/json" />
+  <div id="restorePreview" class="small" style="margin:8px 0;"></div>
+  <button id="restoreBtn" class="secondary" disabled>Restore this into the shared table</button>
+  <div id="restoreMsg"></div>
+</div>
+
 <script>
 // Surface anything that goes wrong instead of failing silently \u2014
 // content:// / file:// pages can hit odd, invisible errors (blocked
@@ -320,7 +329,89 @@ async function scanAll() {
   for (let i = 0; i < KEYS.length; i += CONCURRENCY) {
     await Promise.all(KEYS.slice(i, i + CONCURRENCY).map(scanOne));
   }
+  document.getElementById("restoreCard").style.display = "block";
 }
+
+// --- Targeted records restore -----------------------------------------
+// Reads a chosen backup file entirely on this device, pulls out ONLY the
+// "mtaf-records" data (students & staff), and pushes just that into the
+// shared table for the current school \u2014 every other module (finance,
+// attendance, inventory, announcements, etc.) is left exactly as-is.
+let pendingRestorePayload = null;
+
+function countPeople(recordsObj) {
+  const students = (recordsObj && recordsObj.students || []).length;
+  const staff = (recordsObj && recordsObj.staff || []).length;
+  return { students, staff };
+}
+
+async function onRestoreFileChosen(e) {
+  const file = e.target.files && e.target.files[0];
+  const preview = document.getElementById("restorePreview");
+  const btn = document.getElementById("restoreBtn");
+  pendingRestorePayload = null;
+  btn.disabled = true;
+  if (!file) { preview.textContent = ""; return; }
+  preview.textContent = "Reading file\u2026";
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const records = parsed["mtaf-records"];
+    if (!records || (!records.students && !records.staff)) {
+      preview.innerHTML = '<div class="msg bad">This file doesn\'t contain a "mtaf-records" section \u2014 is this the right backup file?</div>';
+      return;
+    }
+    const fileCounts = countPeople(records);
+    let liveCounts = null;
+    try {
+      const live = await fetchScoped("mtaf-records");
+      liveCounts = countPeople(live && live.value);
+    } catch (err) {}
+    pendingRestorePayload = records;
+    let html = `File contains: <b>${fileCounts.students} students</b>, <b>${fileCounts.staff} staff</b>.`;
+    if (liveCounts) {
+      html += `<br/>Currently live right now: <b>${liveCounts.students} students</b>, <b>${liveCounts.staff} staff</b>.`;
+      if (fileCounts.students < liveCounts.students || fileCounts.staff < liveCounts.staff) {
+        html += `<br/><span style="color:#a3341f;">\u26A0\uFE0F This file has FEWER people than what's currently live. Restoring it will remove the difference. Only continue if you're sure the live data is the wrong one.</span>`;
+      }
+    }
+    preview.innerHTML = html;
+    btn.disabled = false;
+  } catch (err) {
+    preview.innerHTML = `<div class="msg bad">Couldn't read that file: ${err.message}</div>`;
+  }
+}
+
+async function doRestore() {
+  if (!pendingRestorePayload) return;
+  const typed = window.prompt(
+    "This will REPLACE the live students & staff list (for everyone, on every device) with what's in this file. Other modules (finance, attendance, etc.) are NOT affected.\n\nThis cannot be undone.\n\nType RESTORE (capital letters) to continue, or Cancel to back out."
+  );
+  if (typed !== "RESTORE") {
+    if (typed !== null) alert("Not restored \u2014 you didn't type RESTORE exactly, so nothing was changed.");
+    return;
+  }
+  const btn = document.getElementById("restoreBtn");
+  const msg = document.getElementById("restoreMsg");
+  btn.disabled = true;
+  msg.innerHTML = '<div class="msg good">Restoring\u2026</div>';
+  try {
+    const { error } = await sb.from("mtaf_documents").upsert(
+      { school_id: currentSchoolId, data_key: "mtaf-records", payload: pendingRestorePayload },
+      { onConflict: "school_id,data_key" }
+    );
+    if (error) throw error;
+    msg.innerHTML = '<div class="msg good">Restored. Re-scanning to confirm\u2026</div>';
+    await scanOne("mtaf-records");
+    msg.innerHTML = '<div class="msg good">Done \u2014 the shared students & staff list has been restored. Check the app on any device now.</div>';
+  } catch (err) {
+    msg.innerHTML = `<div class="msg bad">Restore failed: ${err.message}</div>`;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("restoreFile").addEventListener("change", onRestoreFileChosen);
+document.getElementById("restoreBtn").addEventListener("click", doRestore);
 
 document.getElementById("loginBtn").addEventListener("click", doLogin);
 document.getElementById("password").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
