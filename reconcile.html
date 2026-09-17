@@ -384,6 +384,20 @@ async function onRestoreFileChosen(e) {
 
 async function doRestore() {
   if (!pendingRestorePayload) return;
+  let restorePin = "";
+  try {
+    const settingsDoc = await fetchScoped("mtaf-settings");
+    restorePin = (settingsDoc && settingsDoc.value && settingsDoc.value.restorePin) || "";
+  } catch (err) {}
+  if (!restorePin) {
+    alert("No restore password has been set yet. A Proprietor/Director/Admin must set one in the app's Settings screen first \u2014 this is on purpose, to prevent accidental overwrites.");
+    return;
+  }
+  const enteredPin = window.prompt("Enter the backup restore password (set by the Proprietor in the app's Settings):");
+  if (enteredPin !== restorePin) {
+    if (enteredPin !== null) alert("Incorrect restore password \u2014 nothing was changed.");
+    return;
+  }
   const typed = window.prompt(
     "This will REPLACE the live students & staff list (for everyone, on every device) with what's in this file. Other modules (finance, attendance, etc.) are NOT affected.\n\nThis cannot be undone.\n\nType RESTORE (capital letters) to continue, or Cancel to back out."
   );
