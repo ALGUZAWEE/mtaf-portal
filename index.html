@@ -2468,6 +2468,24 @@ function App() {
     const starter = setInterval(async () => {
       if (currentSchoolId) {
         setupRealtimeSync(currentSchoolId);
+        if (!storageIsWorking) {
+          // A past save/read failure once flipped this off and nothing
+          // ever flipped it back on its own \u2014 so a single old hiccup
+          // could get a device permanently stuck showing "not
+          // responding" until someone manually cleared their browser.
+          // Probe with a harmless read and self-heal once it's clear
+          // the connection is actually fine again.
+          try {
+            const probe = await sbClient.from("mtaf_documents").select("data_key").eq("school_id", currentSchoolId).limit(1);
+            if (!probe.error) {
+              storageIsWorking = true;
+              MEMORY_DB = {};
+              resyncUnsyncedDocKeys();
+              setReloadKey((k) => k + 1);
+            }
+          } catch (probeErr) {
+          }
+        }
         return;
       }
       // No branch resolved yet on this device \u2014 keep quietly retrying
