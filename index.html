@@ -789,13 +789,6 @@ async function resyncOneUnsyncedKey(key) {
       markKeySynced(key);
       return;
     }
-    if (key === "mtaf-records") {
-      const blocked = await guardRecordsWrite(value);
-      if (blocked) {
-        recordsSyncState = "conflict";
-        return;
-      }
-    }
     const { error } = await sbClient.from("mtaf_documents").upsert(
       { school_id: currentSchoolId, data_key: key, payload: value },
       { onConflict: "school_id,data_key" }
@@ -867,7 +860,6 @@ function setupRealtimeSync(schoolId) {
           delete MEMORY_DB[key];
         } else if (row.payload !== void 0) {
           MEMORY_DB[key] = row.payload;
-          noteServerDoc(key, row.payload);
           if (localCacheWorking) {
             try { window.localStorage.setItem(key, JSON.stringify(row.payload)); } catch (err) {}
           }
@@ -905,73 +897,6 @@ function withTimeout(promiseLike, ms) {
 }
 const NETWORK_READ_TIMEOUT_MS = 15e3;
 const NETWORK_SAVE_TIMEOUT_MS = 25e3;
-// --- Stale-copy protection ---------------------------------------------------
-// "mtaf-records" carries every pupil photo (~8 MB). On a slow phone connection
-// that can't download in 15s, and it's too big for localStorage, so the phone
-// kept showing (and could later re-save) an old copy. These helpers give big
-// documents a realistic timeout, remember what the server last confirmed, and
-// let saves refuse to shrink the records.
-const LARGE_DOC_KEYS = /* @__PURE__ */ new Set(["mtaf-records"]);
-function readTimeoutFor(key) {
-  return LARGE_DOC_KEYS.has(key) ? 12e4 : NETWORK_READ_TIMEOUT_MS;
-}
-const serverConfirmedKeys = /* @__PURE__ */ new Set();
-const serverDocCounts = {};
-// "idle" | "loading" | "ok" | "newer" | "failed" | "conflict"
-let recordsSyncState = "idle";
-function docFingerprint(v) {
-  if (v === void 0) return "u";
-  if (v === null || typeof v !== "object") {
-    return typeof v === "string" && v.length > 2e3 ? "S" + v.length : JSON.stringify(v);
-  }
-  if (Array.isArray(v)) return "[" + v.map(docFingerprint).join(",") + "]";
-  return "{" + Object.keys(v).filter((k) => v[k] !== void 0).sort().map((k) => JSON.stringify(k) + ":" + docFingerprint(v[k])).join(",") + "}";
-}
-function noteServerDoc(key, payload) {
-  serverConfirmedKeys.add(key);
-  if (key === "mtaf-records") {
-    if (payload && typeof payload === "object") {
-      serverDocCounts[key] = {
-        students: Array.isArray(payload.students) ? payload.students.length : 0,
-        staff: Array.isArray(payload.staff) ? payload.staff.length : 0
-      };
-    }
-    if (recordsSyncState !== "newer" && recordsSyncState !== "conflict") recordsSyncState = "ok";
-  }
-}
-function safeLocalSet(key, value) {
-  if (!localCacheWorking) return false;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (err) {
-    // Too big to cache: drop the OLD copy so a reload can't bring it back.
-    try { window.localStorage.removeItem(key); } catch (e2) {}
-    return false;
-  }
-}
-async function guardRecordsWrite(value) {
-  try {
-    if (!serverConfirmedKeys.has("mtaf-records")) {
-      try {
-        await fetchJSONFromServer("mtaf-records");
-      } catch (err) {
-        recordsSyncState = "failed";
-        return "Could not check the latest pupil and staff records on the server, so this change was NOT saved (to avoid overwriting newer data). Check your connection and try again.";
-      }
-    }
-    const known = serverDocCounts["mtaf-records"];
-    if (known) {
-      const nS = Array.isArray(value && value.students) ? value.students.length : 0;
-      const nT = Array.isArray(value && value.staff) ? value.staff.length : 0;
-      if (nS < known.students || nT < known.staff) {
-        return "This screen has an OLDER copy of the records (" + nS + " pupils, " + nT + " staff) than the server (" + known.students + " pupils, " + known.staff + " staff), so this change was NOT saved \u2014 saving it would erase newer records. Reload the portal and try again.";
-      }
-    }
-  } catch (err) {
-  }
-  return "";
-}
 async function invokeAction(action, body, ms) {
   const NO_CONNECTION_MSG = "No connection right now \u2014 nothing was saved, so it's safe to try again once you have signal.";
   try {
@@ -1011,13 +936,17 @@ async function fetchJSONFromServer(key) {
       try {
         const { data: docData, error: docError } = await withTimeout(
           sbClient.from("mtaf_documents").select("payload").eq("school_id", currentSchoolId).eq("data_key", key).maybeSingle(),
-          readTimeoutFor(key)
+          NETWORK_READ_TIMEOUT_MS
         );
         if (docError) throw docError;
         if (docData && docData.payload !== void 0) {
           MEMORY_DB[key] = docData.payload;
-          safeLocalSet(key, docData.payload);
-          noteServerDoc(key, docData.payload);
+          if (localCacheWorking) {
+            try {
+              window.localStorage.setItem(key, JSON.stringify(docData.payload));
+            } catch (err) {
+            }
+          }
           return docData.payload;
         }
         // No row yet for this branch+key — that's a legitimate "nothing saved
@@ -1025,12 +954,16 @@ async function fetchJSONFromServer(key) {
         // unscoped table ONLY if this exact branch has never written this key.
         const { data: legacyData } = await withTimeout(
           sbClient.from(SUPABASE_TABLE).select("value").eq("key", key).maybeSingle(),
-          readTimeoutFor(key)
+          NETWORK_READ_TIMEOUT_MS
         );
         if (legacyData && legacyData.value !== void 0) {
           MEMORY_DB[key] = legacyData.value;
-          safeLocalSet(key, legacyData.value);
-          noteServerDoc(key, legacyData.value);
+          if (localCacheWorking) {
+            try {
+              window.localStorage.setItem(key, JSON.stringify(legacyData.value));
+            } catch (err) {
+            }
+          }
           try {
             await sbClient.from("mtaf_documents").upsert(
               { school_id: currentSchoolId, data_key: key, payload: legacyData.value },
@@ -1040,7 +973,6 @@ async function fetchJSONFromServer(key) {
           }
           return legacyData.value;
         }
-        serverConfirmedKeys.add(key);
         return void 0;
       } catch (docErr) {
         if (attempt >= 2) throw docErr;
@@ -1052,7 +984,7 @@ async function fetchJSONFromServer(key) {
   // this is the only case allowed to use the shared legacy table.
   const { data, error } = await withTimeout(
     sbClient.from(SUPABASE_TABLE).select("value").eq("key", key).maybeSingle(),
-    readTimeoutFor(key)
+    NETWORK_READ_TIMEOUT_MS
   );
   if (error) throw error;
   if (data && data.value !== void 0) {
@@ -1074,8 +1006,7 @@ function updateLocalCache(key, value) {
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
     } catch (err) {
-      try { window.localStorage.removeItem(key); } catch (e2) {}
-      if (!LARGE_DOC_KEYS.has(key)) localCacheWorking = false;
+      localCacheWorking = false;
     }
   }
 }
@@ -1085,20 +1016,11 @@ function refreshJSONInBackground(key) {
   if (unsyncedDocKeys.has(key)) return;
   if (backgroundRefreshInFlight.has(key)) return;
   const last = lastBackgroundRefreshAt[key] || 0;
-  const cooldown = LARGE_DOC_KEYS.has(key) ? 12e4 : BACKGROUND_REFRESH_COOLDOWN_MS;
-  if (Date.now() - last < cooldown) return;
+  if (Date.now() - last < BACKGROUND_REFRESH_COOLDOWN_MS) return;
   backgroundRefreshInFlight.add(key);
   lastBackgroundRefreshAt[key] = Date.now();
-  const before = docFingerprint(MEMORY_DB[key]);
-  const isRecords = key === "mtaf-records";
-  if (isRecords && !serverConfirmedKeys.has(key) && recordsSyncState !== "conflict") recordsSyncState = "loading";
-  fetchJSONFromServer(key).then((value) => {
-    // The screen may be showing an older saved copy: tell the person, but
-    // don't reload underneath them (they might be mid-form).
-    if (isRecords && value !== void 0 && recordsSyncState !== "conflict" && docFingerprint(value) !== before) recordsSyncState = "newer";
-  }).catch((err) => {
+  fetchJSONFromServer(key).catch((err) => {
     storageIsWorking = false;
-    if (isRecords && recordsSyncState !== "conflict") recordsSyncState = "failed";
   }).finally(() => {
     backgroundRefreshInFlight.delete(key);
   });
@@ -1142,27 +1064,18 @@ async function getJSON(key, fallback) {
       if (fetched !== void 0) return fetched;
     } catch (err) {
       storageIsWorking = false;
-      if (key === "mtaf-records") recordsSyncState = "failed";
     }
   }
   return fallback;
 }
 async function setJSON(key, value) {
-  if (key === "mtaf-records" && currentSchoolId && sbClient) {
-    const blocked = await guardRecordsWrite(value);
-    if (blocked) {
-      if (typeof window !== "undefined") window.alert(blocked);
-      return false;
-    }
-  }
   lastChangeAt = Date.now();
   MEMORY_DB[key] = JSON.parse(JSON.stringify(value));
   if (localCacheWorking) {
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
     } catch (err) {
-      try { window.localStorage.removeItem(key); } catch (e2) {}
-      if (!LARGE_DOC_KEYS.has(key)) localCacheWorking = false;
+      localCacheWorking = false;
     }
   }
   const canUseLegacy = !currentSchoolId;
@@ -1192,7 +1105,6 @@ async function setJSON(key, value) {
   const docErrorMsg = docResult.msg;
   if (docSucceeded) {
     markKeySynced(key);
-    noteServerDoc(key, value);
     logDbAudit("save", key);
   } else {
     markKeyUnsynced(key);
@@ -2544,13 +2456,9 @@ function App() {
   const [bannerMsg, setBannerMsg] = useState("");
   const [bannerIsError, setBannerIsError] = useState(false);
   const [storageWorking, setStorageWorking] = useState(storageIsWorking);
-  const [recordsSync, setRecordsSync] = useState(recordsSyncState);
   const fileInputRef = useRef(null);
   useEffect(() => {
-    const watcher = setInterval(() => {
-      setStorageWorking(storageIsWorking);
-      setRecordsSync(recordsSyncState);
-    }, 2e3);
+    const watcher = setInterval(() => setStorageWorking(storageIsWorking), 2e3);
     return () => clearInterval(watcher);
   }, []);
   useEffect(() => {
@@ -2760,7 +2668,7 @@ Type REPLACE (in capital letters) below and press OK to continue, or press Cance
           #mtaf-print-area, #mtaf-print-area * { visibility: visible !important; }
           #mtaf-print-area { position: absolute; left: 0; top: 0; width: 100%; }
         }
-      `), /* @__PURE__ */ React.createElement("div", { id: "mtaf-print-area" }), /* @__PURE__ */ React.createElement("div", { style: { background: "#faf7ef", borderBottom: "1px solid #d8cfb8" }, className: "px-4 py-2 flex items-center justify-between gap-2 sans flex-wrap mtaf-offline" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, storageWorking ? 'Data is saved automatically as you go. Use "Save to file" now and then to keep an offline backup.' : hasPersistentStorage ? `Storage isn't responding right now \u2014 your changes are kept safely for this session, but won't survive a reload until it recovers. Use "Save to file" often.` : "Running in offline mode \u2014 data lives in this session only. Save often."), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, session && (OWNER_ROLES.includes(session.staffRole) || canExportBackup) && /* @__PURE__ */ React.createElement("button", { onClick: handleSaveToFile, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-1.5 rounded-full" }, "Save to file"), session && OWNER_ROLES.includes(session.staffRole) && /* @__PURE__ */ React.createElement("button", { onClick: handleImportClick, disabled: importBusy, style: { background: GOLD, color: INK }, className: "text-xs font-medium px-3 py-1.5 rounded-full disabled:opacity-50" }, importBusy ? "Loading\u2026" : "Load from file (emergency restore)"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "application/json", onChange: handleFileChange, style: { display: "none" } }))), session && storageWorking && (recordsSync === "loading" || recordsSync === "newer" || recordsSync === "failed" || recordsSync === "conflict") && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: recordsSync === "failed" || recordsSync === "conflict" ? { background: "#fbe9e7", color: "#a3341f" } : { background: "#fff4d6", color: "#6b4e00" } }, recordsSync === "loading" ? "Checking for the latest records \u2014 what you see may be an older saved copy. Please wait before adding or changing pupils." : recordsSync === "newer" ? "Newer records have been loaded from the server. " : recordsSync === "failed" ? "Couldn't load the latest records \u2014 the figures on screen may be out of date. Don't add, edit or promote pupils until this clears." : "Changes made on this device could not be uploaded because they would overwrite newer records. Ask the administrator before clearing this device's data.", recordsSync === "newer" && /* @__PURE__ */ React.createElement("button", { onClick: () => { recordsSyncState = "ok"; setRecordsSync("ok"); setReloadKey((k) => k + 1); }, style: { background: GOLD, color: INK }, className: "ml-2 px-3 py-1 rounded-full font-semibold" }, "Refresh now")), session && storageWorking && syncBannerStatus !== "ok" && syncBannerStatus !== "checking" && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: "#fbe9e7", color: "#a3341f" } }, "This device isn't syncing with the school's shared data right now \u2014 anything saved here won't show on other phones, and their changes won't show here, until this reconnects. Trying again automatically; if it doesn't clear in a minute, log out and back in."), bannerMsg && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: bannerIsError ? "#fbe9e7" : "#e7f0ea", color: bannerIsError ? "#a3341f" : TEAL } }, bannerMsg), restoringSession ? /* @__PURE__ */ React.createElement("div", { className: "flex-1 flex items-center justify-center py-16 sans text-sm", style: { color: MUTED } }, "Reconnecting\u2026") : !session ? /* @__PURE__ */ React.createElement(AuthGate, { key: reloadKey, onLogin: setSession }) : /* @__PURE__ */ React.createElement(Shell, { key: reloadKey, session, onLogout: () => {
+      `), /* @__PURE__ */ React.createElement("div", { id: "mtaf-print-area" }), /* @__PURE__ */ React.createElement("div", { style: { background: "#faf7ef", borderBottom: "1px solid #d8cfb8" }, className: "px-4 py-2 flex items-center justify-between gap-2 sans flex-wrap mtaf-offline" }, /* @__PURE__ */ React.createElement("span", { style: { color: MUTED }, className: "text-xs" }, storageWorking ? 'Data is saved automatically as you go. Use "Save to file" now and then to keep an offline backup.' : hasPersistentStorage ? `Storage isn't responding right now \u2014 your changes are kept safely for this session, but won't survive a reload until it recovers. Use "Save to file" often.` : "Running in offline mode \u2014 data lives in this session only. Save often."), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, session && (OWNER_ROLES.includes(session.staffRole) || canExportBackup) && /* @__PURE__ */ React.createElement("button", { onClick: handleSaveToFile, style: { background: TEAL, color: "#fff" }, className: "text-xs font-medium px-3 py-1.5 rounded-full" }, "Save to file"), session && OWNER_ROLES.includes(session.staffRole) && /* @__PURE__ */ React.createElement("button", { onClick: handleImportClick, disabled: importBusy, style: { background: GOLD, color: INK }, className: "text-xs font-medium px-3 py-1.5 rounded-full disabled:opacity-50" }, importBusy ? "Loading\u2026" : "Load from file (emergency restore)"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "application/json", onChange: handleFileChange, style: { display: "none" } }))), session && storageWorking && syncBannerStatus !== "ok" && syncBannerStatus !== "checking" && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: "#fbe9e7", color: "#a3341f" } }, "This device isn't syncing with the school's shared data right now \u2014 anything saved here won't show on other phones, and their changes won't show here, until this reconnects. Trying again automatically; if it doesn't clear in a minute, log out and back in."), bannerMsg && /* @__PURE__ */ React.createElement("div", { className: "px-4 py-2 sans text-xs text-center", style: { background: bannerIsError ? "#fbe9e7" : "#e7f0ea", color: bannerIsError ? "#a3341f" : TEAL } }, bannerMsg), restoringSession ? /* @__PURE__ */ React.createElement("div", { className: "flex-1 flex items-center justify-center py-16 sans text-sm", style: { color: MUTED } }, "Reconnecting\u2026") : !session ? /* @__PURE__ */ React.createElement(AuthGate, { key: reloadKey, onLogin: setSession }) : /* @__PURE__ */ React.createElement(Shell, { key: reloadKey, session, onLogout: () => {
     clearRememberedSession();
     try {
       if (window.localStorage) window.localStorage.removeItem(SCHOOL_CACHE_KEY);
@@ -3607,9 +3515,6 @@ function RecordsModule({ only, tag } = {}) {
       if (error || !result || !result.ok) {
         setSaveError((result && result.error) || (error && error.message) || "Could not save \u2014 try again.");
         return;
-      }
-      if ((data[tab] || []).some((r) => r.id === result.record.id)) {
-        window.alert("Warning: the ID " + result.record.id + " is already used by another person. Tell the administrator before printing an ID card or letter for this record.");
       }
       const nextData = { ...data, [tab]: [result.record, ...data[tab]] };
       setData(nextData);
@@ -5714,10 +5619,6 @@ function AcademicsModule({ canPromote }) {
     setPromoteBusy(true);
     setPromoteNote(null);
     try {
-      try {
-        await fetchJSONFromServer(K.records);
-      } catch (freshErr) {
-      }
       const rec = await getJSON(K.records, { students: [], staff: [], counters: {} });
       const idsToPromote = roster.filter((s) => !promoteExcluded[s.id]).map((s) => s.id);
       const idSet = new Set(idsToPromote);
@@ -5725,11 +5626,7 @@ function AcademicsModule({ canPromote }) {
         if (!idSet.has(s.id)) return s;
         return { ...s, enrollments: (s.enrollments || []).map((en) => en.className === classObj.name && en.arm === selArm && en.section === classObj.section && (en.town || s.town) === selTown ? { ...en, className: promoteDestClassObj.name, arm: promoteDestArm } : en) };
       });
-      const promoteSaved = await setJSON(K.records, { ...rec, students: nextStudents });
-      if (!promoteSaved) {
-        setPromoteNote({ kind: "error", text: "Promotion was NOT saved — read the message that appeared, reload the portal, and try again." });
-        return;
-      }
+      await setJSON(K.records, { ...rec, students: nextStudents });
       setStudents(nextStudents);
       setPromoteNote({ kind: "ok", text: `Promoted ${idsToPromote.length} of ${roster.length} pupil(s) to ${promoteDestClassObj.name} ${promoteDestArm}.` });
       setPromoteExcluded({});
