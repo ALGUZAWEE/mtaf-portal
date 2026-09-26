@@ -775,6 +775,25 @@ function markKeyUnsynced(key) {
 function markKeySynced(key) {
   if (unsyncedDocKeys.delete(key)) persistUnsyncedIndex();
 }
+// A save can finish locally a moment before this device's OWN change
+// echoes back over realtime. Without this, that echo looks exactly like
+// a remote change and forces a full app reload right after every save.
+// Remember recently-saved keys for a short grace window and ignore their
+// echoes too.
+const SELF_WRITE_GRACE_MS = 5e3;
+const recentSelfWrites = /* @__PURE__ */ new Map();
+function markSelfWrite(key) {
+  recentSelfWrites.set(key, Date.now());
+}
+function isRecentSelfWrite(key) {
+  const at = recentSelfWrites.get(key);
+  if (at === void 0) return false;
+  if (Date.now() - at > SELF_WRITE_GRACE_MS) {
+    recentSelfWrites.delete(key);
+    return false;
+  }
+  return true;
+}
 async function resyncOneUnsyncedKey(key) {
   try {
     let value = MEMORY_DB[key];
@@ -795,6 +814,7 @@ async function resyncOneUnsyncedKey(key) {
     );
     if (error) throw error;
     markKeySynced(key);
+    markSelfWrite(key);
   } catch (err) {
   }
 }
@@ -855,7 +875,7 @@ function setupRealtimeSync(schoolId) {
         const key = row.data_key;
         if (!key) return;
         // Ignore echoes of our own just-made save.
-        if (unsyncedDocKeys.has(key)) return;
+        if (unsyncedDocKeys.has(key) || isRecentSelfWrite(key)) return;
         if (payload.eventType === "DELETE") {
           delete MEMORY_DB[key];
         } else if (row.payload !== void 0) {
@@ -1105,6 +1125,7 @@ async function setJSON(key, value) {
   const docErrorMsg = docResult.msg;
   if (docSucceeded) {
     markKeySynced(key);
+    markSelfWrite(key);
     logDbAudit("save", key);
   } else {
     markKeyUnsynced(key);
