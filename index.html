@@ -1040,7 +1040,19 @@ function refreshJSONInBackground(key) {
   if (Date.now() - last < BACKGROUND_REFRESH_COOLDOWN_MS) return;
   backgroundRefreshInFlight.add(key);
   lastBackgroundRefreshAt[key] = Date.now();
-  fetchJSONFromServer(key).catch((err) => {
+  const prevRaw = MEMORY_DB[key] !== void 0 ? JSON.stringify(MEMORY_DB[key]) : void 0;
+  fetchJSONFromServer(key).then((fresh) => {
+    // The cached copy shown on screen (e.g. from a phone that was closed for
+    // days) can be genuinely out of date. Updating MEMORY_DB alone doesn't
+    // help \u2014 whatever's already rendered keeps showing the old numbers
+    // forever, since nothing tells it to re-check. If what we just fetched
+    // is actually different from what was cached, treat it the same as a
+    // remote update so the screen refreshes with the real data \u2014 unless
+    // this device just wrote that very change itself.
+    if (fresh !== void 0 && JSON.stringify(fresh) !== prevRaw && !isRecentSelfWrite(key)) {
+      window.dispatchEvent(new CustomEvent("mtaf-remote-update", { detail: { keys: [key] } }));
+    }
+  }).catch((err) => {
     storageIsWorking = false;
   }).finally(() => {
     backgroundRefreshInFlight.delete(key);
