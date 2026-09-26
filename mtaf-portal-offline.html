@@ -843,6 +843,7 @@ if (typeof window !== "undefined") {
 // 20s poll still keeps things eventually consistent.
 let realtimeChannel = null;
 let realtimeSchoolId = null;
+let storageHealProbeInFlight = false;
 const REALTIME_DEBOUNCE_MS = 800;
 let realtimeNotifyTimer = null;
 const pendingRemoteKeys = /* @__PURE__ */ new Set();
@@ -915,8 +916,8 @@ function withTimeout(promiseLike, ms) {
     );
   });
 }
-const NETWORK_READ_TIMEOUT_MS = 15e3;
-const NETWORK_SAVE_TIMEOUT_MS = 25e3;
+const NETWORK_READ_TIMEOUT_MS = 3e4;
+const NETWORK_SAVE_TIMEOUT_MS = 4e4;
 async function invokeAction(action, body, ms) {
   const NO_CONNECTION_MSG = "No connection right now \u2014 nothing was saved, so it's safe to try again once you have signal.";
   try {
@@ -2489,22 +2490,30 @@ function App() {
     const starter = setInterval(async () => {
       if (currentSchoolId) {
         setupRealtimeSync(currentSchoolId);
-        if (!storageIsWorking) {
+        if (!storageIsWorking && !storageHealProbeInFlight) {
           // A past save/read failure once flipped this off and nothing
           // ever flipped it back on its own \u2014 so a single old hiccup
           // could get a device permanently stuck showing "not
           // responding" until someone manually cleared their browser.
           // Probe with a harmless read and self-heal once it's clear
-          // the connection is actually fine again.
+          // the connection is actually fine again. Guarded against
+          // overlapping probes, and no longer wipes the local cache on
+          // recovery \u2014 on a slow connection that wipe forced an
+          // immediate full refetch of everything, which is exactly what
+          // was showing as a long "0 data / stuck loading" screen right
+          // after reconnecting. Existing data stays visible and quietly
+          // refreshes in the background instead.
+          storageHealProbeInFlight = true;
           try {
             const probe = await sbClient.from("mtaf_documents").select("data_key").eq("school_id", currentSchoolId).limit(1);
             if (!probe.error) {
               storageIsWorking = true;
-              MEMORY_DB = {};
               resyncUnsyncedDocKeys();
               setReloadKey((k) => k + 1);
             }
           } catch (probeErr) {
+          } finally {
+            storageHealProbeInFlight = false;
           }
         }
         return;
