@@ -1132,7 +1132,7 @@ async function setJSON(key, value) {
     markKeyUnsynced(key);
   }
   const ok = legacySucceeded || docSucceeded;
-  const QUIET_FAIL_KEYS = /* @__PURE__ */ new Set([K.loginHistory]);
+  const QUIET_FAIL_KEYS = /* @__PURE__ */ new Set([K.loginHistory, K.att, K.acad, K.scheme]);
   if (!ok && !QUIET_FAIL_KEYS.has(key) && typeof window !== "undefined") {
     window.alert("MTAF save FAILED for '" + key + "'.\nSchool ID set: " + (currentSchoolId ? "yes" : "NO") + "\nError: " + (docErrorMsg || "unknown \u2014 legacy path also unavailable"));
   }
@@ -2498,18 +2498,21 @@ function App() {
           // Probe with a harmless read and self-heal once it's clear
           // the connection is actually fine again. Guarded against
           // overlapping probes, and no longer wipes the local cache on
-          // recovery \u2014 on a slow connection that wipe forced an
+          // recovery — on a slow connection that wipe forced an
           // immediate full refetch of everything, which is exactly what
           // was showing as a long "0 data / stuck loading" screen right
           // after reconnecting. Existing data stays visible and quietly
-          // refreshes in the background instead.
+          // refreshes in the background instead. Also no longer forces
+          // a full screen reload here: that reload was resetting people
+          // back to the Dashboard mid-task (e.g. mid-attendance) every
+          // time the connection blipped and recovered, which is worse
+          // than just letting the banner clear quietly.
           storageHealProbeInFlight = true;
           try {
             const probe = await sbClient.from("mtaf_documents").select("data_key").eq("school_id", currentSchoolId).limit(1);
             if (!probe.error) {
               storageIsWorking = true;
               resyncUnsyncedDocKeys();
-              setReloadKey((k) => k + 1);
             }
           } catch (probeErr) {
           } finally {
